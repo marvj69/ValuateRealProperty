@@ -456,7 +456,6 @@ Identify 2 active listings that the subject property will be fighting against fo
             const specialInstructions = document.getElementById('specialInstructions').value.trim();
             const reportAudience = document.getElementById('reportAudience').value;
             const reportCount = parseInt(document.getElementById('reportCount').value);
-            const concurrency = parseInt(document.getElementById('concurrency').value);
             const enableSearch = document.getElementById('enableSearch').checked;
 
             if (!apiKey || (!propertyAddress && propertyFiles.length === 0)) {
@@ -551,54 +550,60 @@ Identify 2 active listings that the subject property will be fighting against fo
                 .replace('{{PDF_NOTE}}', attachmentNote)
                 .replace('{{REPORT_AUDIENCE}}', reportAudience);
 
-            // Generate reports with concurrency control
-            const generateReport = async (index) => {
-                updateStatus(index, 'running', 'Generating...');
-                
-                try {
-                    const result = await callGeminiAPI(apiKey, model, prompt, enableSearch, index, attachmentPayloads);
-                    reports[index] = {
-                        index: index,
-                        success: true,
-                        content: result.content,
-                        searchSuggestions: result.searchSuggestions || [],
-                        valuations: extractValuations(result.content)
-                    };
-                    updateStatus(index, 'success', 'Completed');
-                    displayReport(index, result.content, result.searchSuggestions);
-                } catch (error) {
-                    reports[index] = {
-                        index: index,
-                        success: false,
-                        error: error.message
-                    };
-                    updateStatus(index, 'error', `Error: ${error.message}`);
+            const MAX_REPORT_RETRIES = 2;
+            const RETRY_DELAY_MS = 1500;
+
+            const waitMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+            // Generate reports concurrently (all at once) with retry support
+            const generateReportWithRetry = async (index) => {
+                let attempt = 0;
+                let lastError = null;
+
+                while (attempt <= MAX_REPORT_RETRIES) {
+                    const attemptLabel = attempt === 0
+                        ? 'Generating...'
+                        : `Retrying (${attempt} of ${MAX_REPORT_RETRIES})...`;
+                    updateStatus(index, 'running', attemptLabel);
+
+                    try {
+                        const result = await callGeminiAPI(apiKey, model, prompt, enableSearch, index, attachmentPayloads);
+                        reports[index] = {
+                            index: index,
+                            success: true,
+                            content: result.content,
+                            searchSuggestions: result.searchSuggestions || [],
+                            valuations: extractValuations(result.content)
+                        };
+                        updateStatus(index, 'success', 'Completed');
+                        displayReport(index, result.content, result.searchSuggestions);
+                        completedCount++;
+                        updateProgress();
+                        return reports[index];
+                    } catch (error) {
+                        lastError = error;
+                        if (attempt < MAX_REPORT_RETRIES) {
+                            await waitMs(RETRY_DELAY_MS);
+                            attempt++;
+                            continue;
+                        }
+                        break;
+                    }
                 }
 
+                reports[index] = {
+                    index: index,
+                    success: false,
+                    error: lastError?.message || 'Unknown error'
+                };
+                updateStatus(index, 'error', `Error: ${reports[index].error}`);
                 completedCount++;
                 updateProgress();
-
-                if (completedCount === totalReports) {
-                    finalize();
-                }
+                return reports[index];
             };
 
-            // Execute with concurrency control
-            const queue = [...Array(reportCount).keys()];
-            const executing = [];
-
-            const enqueue = async () => {
-                while (queue.length > 0 && executing.length < concurrency) {
-                    const index = queue.shift();
-                    const promise = generateReport(index).then(() => {
-                        executing.splice(executing.indexOf(promise), 1);
-                        enqueue();
-                    });
-                    executing.push(promise);
-                }
-            };
-
-            enqueue();
+            const reportPromises = [...Array(reportCount).keys()].map((index) => generateReportWithRetry(index));
+            Promise.all(reportPromises).then(() => finalize());
         });
 
         // Call Gemini API
