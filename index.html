@@ -33,9 +33,15 @@
                     <p class="text-[0.65rem] font-medium text-slate-400 uppercase tracking-widest hidden sm:block">AI Valuation Engine</p>
                 </div>
             </div>
-            <a href="https://aistudio.google.com/apikey" target="_blank" class="text-xs font-medium text-brand-600 bg-brand-50 px-3 py-1.5 rounded-full hover:bg-brand-100 transition-colors">
-                Get API Key <i class="fas fa-external-link-alt ml-1"></i>
-            </a>
+            <div class="flex items-center gap-2 sm:gap-3">
+                <button id="historyToggle" type="button" class="relative w-10 h-10 rounded-full border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-sm transition-colors" aria-label="Open saved valuations">
+                    <i class="fas fa-bars"></i>
+                    <span id="historyCountBadge" class="history-count hidden">0</span>
+                </button>
+                <a href="https://aistudio.google.com/apikey" target="_blank" class="text-xs font-medium text-brand-600 bg-brand-50 px-3 py-1.5 rounded-full hover:bg-brand-100 transition-colors">
+                    Get API Key <i class="fas fa-external-link-alt ml-1"></i>
+                </a>
+            </div>
         </div>
     </nav>
 
@@ -282,6 +288,32 @@
             <div id="reportsContainer" class="space-y-4"></div>
         </div>
 
+    </div>
+
+    <!-- Saved Valuations Drawer -->
+    <div id="historyDrawer" class="history-drawer hidden" aria-hidden="true">
+        <div id="historyOverlay" class="history-overlay" tabindex="-1"></div>
+        <aside class="history-panel" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+            <div class="history-panel-header">
+                <div>
+                    <p class="history-eyebrow">Archive</p>
+                    <h2 id="historyTitle">Saved Valuations</h2>
+                </div>
+                <button id="historyClose" type="button" class="history-close" aria-label="Close saved valuations">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="history-panel-actions">
+                <button id="historyRefresh" type="button" class="history-action">
+                    <i class="fas fa-rotate"></i> Refresh
+                </button>
+                <button id="historyClear" type="button" class="history-action danger">
+                    <i class="fas fa-trash"></i> Clear All
+                </button>
+            </div>
+            <div id="historyList" class="history-list" aria-live="polite"></div>
+            <div id="historyEmpty" class="history-empty hidden">No saved valuations yet.</div>
+        </aside>
     </div>
 
     <!-- Original Logic Script (Unchanged) -->

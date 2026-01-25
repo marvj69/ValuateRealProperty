@@ -225,8 +225,24 @@ Identify 2 active listings that the subject property will be fighting against fo
         const attachmentState = {
             files: []
         };
+        const historyToggle = document.getElementById('historyToggle');
+        const historyDrawer = document.getElementById('historyDrawer');
+        const historyOverlay = document.getElementById('historyOverlay');
+        const historyClose = document.getElementById('historyClose');
+        const historyList = document.getElementById('historyList');
+        const historyEmpty = document.getElementById('historyEmpty');
+        const historyRefresh = document.getElementById('historyRefresh');
+        const historyClear = document.getElementById('historyClear');
+        const historyCountBadge = document.getElementById('historyCountBadge');
 
         const API_KEY_STORAGE = 'valuate:geminiApiKey';
+        const HISTORY_DB_NAME = 'valuate-history';
+        const HISTORY_STORE_NAME = 'reports';
+        const HISTORY_STORAGE_KEY = 'valuate:history';
+        const HISTORY_MAX_ITEMS = 50;
+        let historyDbPromise = null;
+        let historyStorageMode = null;
+        let historyCache = [];
         const storedApiKey = localStorage.getItem(API_KEY_STORAGE);
         if (storedApiKey) {
             apiKeyInput.value = storedApiKey;
@@ -375,6 +391,55 @@ Identify 2 active listings that the subject property will be fighting against fo
         
         updateDownloadButtonState(false);
         downloadPdfBtn.addEventListener('click', saveFinalReportAsPDF);
+        refreshHistoryList();
+
+        if (historyToggle) {
+            historyToggle.addEventListener('click', () => {
+                refreshHistoryList();
+                openHistoryDrawer();
+            });
+        }
+        if (historyOverlay) {
+            historyOverlay.addEventListener('click', closeHistoryDrawer);
+        }
+        if (historyClose) {
+            historyClose.addEventListener('click', closeHistoryDrawer);
+        }
+        if (historyRefresh) {
+            historyRefresh.addEventListener('click', refreshHistoryList);
+        }
+        if (historyClear) {
+            historyClear.addEventListener('click', async () => {
+                const confirmed = confirm('Clear all saved valuations? This cannot be undone.');
+                if (!confirmed) return;
+                await clearHistoryReports();
+                await refreshHistoryList();
+            });
+        }
+        if (historyList) {
+            historyList.addEventListener('click', async (event) => {
+                const button = event.target.closest('button[data-action]');
+                if (!button) return;
+                const action = button.getAttribute('data-action');
+                const id = button.getAttribute('data-id');
+                if (!id) return;
+                if (action === 'view') {
+                    loadHistoryReport(id);
+                    return;
+                }
+                if (action === 'delete') {
+                    const confirmed = confirm('Delete this saved valuation?');
+                    if (!confirmed) return;
+                    await deleteHistoryReport(id);
+                    await refreshHistoryList();
+                }
+            });
+        }
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && historyDrawer && !historyDrawer.classList.contains('hidden')) {
+                closeHistoryDrawer();
+            }
+        });
 
         // Form submission handler
         form.addEventListener('submit', async (e) => {
@@ -910,6 +975,7 @@ ${reportsText}`;
                 finalReportStatus.textContent = ''; // Clear status on success
                 finalReportContent.innerHTML = markdownToHtml(result.content);
                 updateDownloadButtonState(true);
+                await persistFinalReport(result.content);
             } catch (error) {
                 finalReportStatus.textContent = `Final report failed: ${error.message}`;
                 updateDownloadButtonState(false);
@@ -1327,6 +1393,296 @@ async function saveFinalReportAsPDF() {
             wrapper.innerHTML = rawHtml;
 
             return wrapper.innerHTML;
+        }
+
+        function generateHistoryId() {
+            if (window.crypto?.randomUUID) {
+                return window.crypto.randomUUID();
+            }
+            return `hist-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
+
+        function normalizeHistoryModel(model) {
+            if (!model) return 'Unknown model';
+            return model.replace(/^models\//i, '');
+        }
+
+        function formatHistoryAudience(audience) {
+            if (!audience) return 'Audience unknown';
+            return audience.charAt(0).toUpperCase() + audience.slice(1);
+        }
+
+        function formatHistoryDate(timestamp) {
+            if (!timestamp) return 'Date unknown';
+            return new Date(timestamp).toLocaleString(undefined, {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        function buildHistoryMeta(report) {
+            const parts = [];
+            parts.push(formatHistoryDate(report.createdAt));
+            if (report.audience) {
+                parts.push(formatHistoryAudience(report.audience));
+            }
+            if (report.model) {
+                parts.push(normalizeHistoryModel(report.model));
+            }
+            if (report.valuations?.rangeLow && report.valuations?.rangeHigh) {
+                parts.push(`${formatCurrency(report.valuations.rangeLow)} - ${formatCurrency(report.valuations.rangeHigh)}`);
+            } else if (report.valuations?.pointEstimate) {
+                parts.push(formatCurrency(report.valuations.pointEstimate));
+            }
+            return parts.join(' • ');
+        }
+
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value ?? '';
+            return div.innerHTML;
+        }
+
+        function supportsIndexedDb() {
+            return typeof indexedDB !== 'undefined';
+        }
+
+        function openHistoryDb() {
+            if (historyDbPromise) return historyDbPromise;
+            historyDbPromise = new Promise((resolve, reject) => {
+                const request = indexedDB.open(HISTORY_DB_NAME, 1);
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains(HISTORY_STORE_NAME)) {
+                        const store = db.createObjectStore(HISTORY_STORE_NAME, { keyPath: 'id' });
+                        store.createIndex('createdAt', 'createdAt');
+                    }
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+            return historyDbPromise;
+        }
+
+        async function ensureHistoryStorageMode() {
+            if (historyStorageMode) return historyStorageMode;
+            if (!supportsIndexedDb()) {
+                historyStorageMode = 'local';
+                return historyStorageMode;
+            }
+            try {
+                await openHistoryDb();
+                historyStorageMode = 'indexeddb';
+            } catch (error) {
+                console.warn('IndexedDB unavailable, falling back to localStorage.', error);
+                historyStorageMode = 'local';
+            }
+            return historyStorageMode;
+        }
+
+        function loadHistoryFromLocal() {
+            try {
+                const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+                const parsed = raw ? JSON.parse(raw) : [];
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                console.warn('Failed to parse saved history.', error);
+                return [];
+            }
+        }
+
+        function saveHistoryToLocal(reports) {
+            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(reports));
+        }
+
+        async function listHistoryReports() {
+            const mode = await ensureHistoryStorageMode();
+            let reports = [];
+            if (mode === 'indexeddb') {
+                const db = await openHistoryDb();
+                reports = await new Promise((resolve, reject) => {
+                    const tx = db.transaction(HISTORY_STORE_NAME, 'readonly');
+                    const store = tx.objectStore(HISTORY_STORE_NAME);
+                    const request = store.getAll();
+                    request.onsuccess = () => resolve(request.result || []);
+                    request.onerror = () => reject(request.error);
+                });
+            } else {
+                reports = loadHistoryFromLocal();
+            }
+            return reports.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        }
+
+        async function saveHistoryReport(report) {
+            const mode = await ensureHistoryStorageMode();
+            if (mode === 'indexeddb') {
+                const db = await openHistoryDb();
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction(HISTORY_STORE_NAME, 'readwrite');
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                    tx.objectStore(HISTORY_STORE_NAME).put(report);
+                });
+            } else {
+                const reports = loadHistoryFromLocal();
+                reports.push(report);
+                saveHistoryToLocal(reports);
+            }
+        }
+
+        async function deleteHistoryReport(id) {
+            const mode = await ensureHistoryStorageMode();
+            if (mode === 'indexeddb') {
+                const db = await openHistoryDb();
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction(HISTORY_STORE_NAME, 'readwrite');
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                    tx.objectStore(HISTORY_STORE_NAME).delete(id);
+                });
+            } else {
+                const reports = loadHistoryFromLocal().filter((item) => item.id !== id);
+                saveHistoryToLocal(reports);
+            }
+        }
+
+        async function clearHistoryReports() {
+            const mode = await ensureHistoryStorageMode();
+            if (mode === 'indexeddb') {
+                const db = await openHistoryDb();
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction(HISTORY_STORE_NAME, 'readwrite');
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                    tx.objectStore(HISTORY_STORE_NAME).clear();
+                });
+            } else {
+                localStorage.removeItem(HISTORY_STORAGE_KEY);
+            }
+        }
+
+        async function pruneHistoryIfNeeded() {
+            const reports = await listHistoryReports();
+            if (reports.length <= HISTORY_MAX_ITEMS) return;
+            const toDelete = reports.slice(HISTORY_MAX_ITEMS);
+            await Promise.all(toDelete.map((report) => deleteHistoryReport(report.id)));
+        }
+
+        function updateHistoryBadge(count) {
+            if (!historyCountBadge) return;
+            if (count > 0) {
+                historyCountBadge.textContent = count > 99 ? '99+' : String(count);
+                historyCountBadge.classList.remove('hidden');
+            } else {
+                historyCountBadge.classList.add('hidden');
+            }
+        }
+
+        function renderHistoryList(reports) {
+            if (!historyList || !historyEmpty) return;
+            historyList.innerHTML = '';
+            if (!reports || reports.length === 0) {
+                historyEmpty.classList.remove('hidden');
+                return;
+            }
+            historyEmpty.classList.add('hidden');
+            reports.forEach((report) => {
+                const item = document.createElement('div');
+                item.className = 'history-item';
+                const title = escapeHtml(report.address || 'Address not provided');
+                const promptLabel = report.promptKey === 'experimental' ? 'Bank-Grade CMA' : 'Standard';
+                const metaText = buildHistoryMeta(report);
+                item.innerHTML = `
+                    <div class="history-item-header">
+                        <div class="history-item-title">${title}</div>
+                    </div>
+                    <div class="history-item-meta">${metaText}</div>
+                    <div class="history-item-tags">
+                        <span class="history-tag">${promptLabel}</span>
+                        ${report.enableSearch ? '<span class="history-tag">Grounded</span>' : ''}
+                    </div>
+                    <div class="history-item-actions">
+                        <button class="history-view" type="button" data-action="view" data-id="${report.id}">
+                            <i class="fas fa-eye"></i> View
+                        </button>
+                        <button class="history-delete" type="button" data-action="delete" data-id="${report.id}">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
+                `;
+                historyList.appendChild(item);
+            });
+        }
+
+        async function refreshHistoryList() {
+            try {
+                const reports = await listHistoryReports();
+                historyCache = reports;
+                renderHistoryList(reports);
+                updateHistoryBadge(reports.length);
+            } catch (error) {
+                console.warn('Failed to load saved valuations.', error);
+            }
+        }
+
+        function openHistoryDrawer() {
+            if (!historyDrawer) return;
+            historyDrawer.classList.remove('hidden');
+            historyDrawer.setAttribute('aria-hidden', 'false');
+            requestAnimationFrame(() => {
+                historyDrawer.classList.add('is-open');
+            });
+            if (historyClose) {
+                historyClose.focus();
+            }
+        }
+
+        function closeHistoryDrawer() {
+            if (!historyDrawer) return;
+            historyDrawer.classList.remove('is-open');
+            historyDrawer.setAttribute('aria-hidden', 'true');
+            setTimeout(() => {
+                if (!historyDrawer.classList.contains('is-open')) {
+                    historyDrawer.classList.add('hidden');
+                }
+            }, 300);
+        }
+
+        function loadHistoryReport(id) {
+            const report = historyCache.find((item) => item.id === id);
+            if (!report) return;
+            finalReportSection.classList.remove('hidden');
+            finalReportStatus.textContent = 'Loaded saved valuation.';
+            finalReportContent.innerHTML = markdownToHtml(report.content || '');
+            updateDownloadButtonState(true);
+            requestState.propertyAddress = report.address || '';
+            requestState.inferredAddress = report.address || '';
+            closeHistoryDrawer();
+            finalReportSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function persistFinalReport(markdownContent) {
+            const record = {
+                id: generateHistoryId(),
+                createdAt: Date.now(),
+                address: requestState.propertyAddress?.trim() || requestState.inferredAddress?.trim() || 'Address not provided',
+                audience: requestState.reportAudience || '',
+                model: requestState.model || '',
+                promptKey: requestState.promptKey || 'standard',
+                reportCount: totalReports || null,
+                enableSearch: Boolean(requestState.enableSearch),
+                valuations: extractValuations(markdownContent || ''),
+                content: markdownContent || ''
+            };
+
+            try {
+                await saveHistoryReport(record);
+                await pruneHistoryIfNeeded();
+                await refreshHistoryList();
+            } catch (error) {
+                console.warn('Failed to save valuation history.', error);
+            }
         }
 
         // Make toggleAccordion available globally
