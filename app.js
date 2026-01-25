@@ -1332,6 +1332,16 @@ async function saveFinalReportAsPDF() {
         // Make toggleAccordion available globally
         window.toggleAccordion = toggleAccordion;
 
+        // PWA service worker registration (GitHub Pages friendly)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js', { scope: './' })
+                    .catch((error) => {
+                        console.warn('Service worker registration failed:', error);
+                    });
+            });
+        }
+
         async function validateCompsAndListings(reportsText) {
             const VALIDATE_COMPS_TEMPLATE = `You are a data verification specialist focused on real estate comps. Extract all comparable sales and active/pending listings from the reports below and verify them.
 
