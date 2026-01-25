@@ -1,7 +1,10 @@
         // Sync the visible instruction textarea with the hidden one required by the logic
-        document.getElementById('visibleInstructions').addEventListener('input', function(e) {
-            document.getElementById('specialInstructions').value = e.target.value;
-        });
+        const visibleInstructions = document.getElementById('visibleInstructions');
+        if (visibleInstructions) {
+            visibleInstructions.addEventListener('input', function(e) {
+                document.getElementById('specialInstructions').value = e.target.value;
+            });
+        }
 
         /* --- START OF ORIGINAL LOGIC --- */
 
@@ -243,7 +246,30 @@ Identify 2 active listings that the subject property will be fighting against fo
         let historyDbPromise = null;
         let historyStorageMode = null;
         let historyCache = [];
-        const storedApiKey = localStorage.getItem(API_KEY_STORAGE);
+        const safeStorage = {
+            get(key) {
+                try {
+                    return window.localStorage?.getItem(key) ?? null;
+                } catch (error) {
+                    return null;
+                }
+            },
+            set(key, value) {
+                try {
+                    window.localStorage?.setItem(key, value);
+                } catch (error) {
+                    // Ignore storage failures (private mode, file://, etc.)
+                }
+            },
+            remove(key) {
+                try {
+                    window.localStorage?.removeItem(key);
+                } catch (error) {
+                    // Ignore storage failures (private mode, file://, etc.)
+                }
+            }
+        };
+        const storedApiKey = safeStorage.get(API_KEY_STORAGE);
         if (storedApiKey) {
             apiKeyInput.value = storedApiKey;
             rememberApiKey.checked = true;
@@ -464,9 +490,9 @@ Identify 2 active listings that the subject property will be fighting against fo
             }
 
             if (rememberApiKey.checked) {
-                localStorage.setItem(API_KEY_STORAGE, apiKey);
+                safeStorage.set(API_KEY_STORAGE, apiKey);
             } else {
-                localStorage.removeItem(API_KEY_STORAGE);
+                safeStorage.remove(API_KEY_STORAGE);
             }
 
             const invalidFiles = propertyFiles.filter((file) => !isSupportedAttachment(file));
