@@ -1,0 +1,195 @@
+        /* Custom UI Tweaks */
+        :root {
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glass-bg: rgba(255, 255, 255, 0.7);
+        }
+        
+        body {
+            background-color: #f8fafc;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(99, 102, 241, 0.1) 0px, transparent 50%);
+            background-attachment: fixed;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Form Elements */
+        .input-group {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+
+        .custom-input {
+            width: 100%;
+            padding: 1rem 1rem 1rem 3rem;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .custom-input:focus {
+            outline: none;
+            border-color: #0ea5e9;
+            box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+        }
+
+        .input-icon {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+            pointer-events: none;
+        }
+
+        .custom-file-upload {
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            background: #f8fafc;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .custom-file-upload:hover {
+            border-color: #0ea5e9;
+            background: #f0f9ff;
+        }
+        .upload-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            color: #475569;
+            margin-top: 0.75rem;
+        }
+        .upload-status .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            background: #f1f5f9;
+            color: #64748b;
+            font-weight: 600;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .upload-status .status-pill.is-ready {
+            background: #ecfdf3;
+            color: #047857;
+        }
+        .upload-previews {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 0.75rem;
+            margin-top: 0.75rem;
+        }
+        .upload-preview-card {
+            position: relative;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #ffffff;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+        }
+        .upload-preview-thumb {
+            width: 100%;
+            height: 92px;
+            object-fit: cover;
+            display: block;
+            background: #f1f5f9;
+        }
+        .upload-preview-meta {
+            padding: 0.5rem 0.6rem 0.65rem;
+            font-size: 0.7rem;
+            color: #475569;
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .upload-preview-meta i {
+            color: #0ea5e9;
+        }
+        .upload-remove {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            border: none;
+            background: rgba(15, 23, 42, 0.72);
+            color: #f8fafc;
+            font-size: 0.7rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .upload-remove:hover {
+            background: rgba(15, 23, 42, 0.9);
+        }
+
+        /* Details Summary Toggle */
+        details > summary {
+            list-style: none;
+        }
+        details > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        /* Toggle Switch */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #0ea5e9;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #0ea5e9;
+        }
+        
+        /* Report Typography */
+        .prose h1 { font-family: 'Newsreader', serif; font-weight: 700; font-size: 2rem; color: #1e293b; margin-top: 2rem; margin-bottom: 1rem; line-height: 1.2; }
+        .prose h2 { font-family: 'Newsreader', serif; font-weight: 600; font-size: 1.5rem; color: #334155; margin-top: 1.5rem; margin-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }
+        .prose h3 { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600; font-size: 1.1rem; color: #475569; margin-top: 1.25rem; margin-bottom: 0.5rem; }
+        .prose p { margin-bottom: 1rem; line-height: 1.7; color: #334155; }
+        .prose ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; }
+        .prose li { margin-bottom: 0.5rem; }
+        .prose table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9rem; }
+        .prose th { background: #f1f5f9; padding: 0.75rem; text-align: left; font-weight: 600; border: 1px solid #e2e8f0; }
+        .prose td { padding: 0.75rem; border: 1px solid #e2e8f0; vertical-align: top; }
+        .prose blockquote { border-left: 4px solid #0ea5e9; padding-left: 1rem; margin: 1.5rem 0; font-style: italic; color: #475569; background: #f0f9ff; padding: 1rem; border-radius: 0 8px 8px 0; }
+
+        /* Loader */
+        .loader-bar {
+            height: 4px;
+            width: 100%;
+            background: #e2e8f0;
+            overflow: hidden;
+            position: relative;
+            border-radius: 99px;
+        }
+        .loader-bar::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 50%;
+            background: #0ea5e9;
+            animation: loading 1.5s infinite ease-in-out;
+        }
+        @keyframes loading {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(200%); }
+        }
+
+        /* Status colors */
+        .status-success { color: #10b981; }
+        .status-error { color: #ef4444; }
+        .status-running { color: #0ea5e9; }

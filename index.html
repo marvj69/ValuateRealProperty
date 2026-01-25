@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Market Intelligence Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="tailwind-config.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="text-slate-700 antialiased min-h-screen pb-24">
+
+    <!-- Top Navigation -->
+    <nav class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-brand-900 flex items-center justify-center text-white shadow-lg">
+                    <i class="fas fa-building text-sm"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-slate-900 leading-tight">Market<span class="text-brand-600">Intel</span></h1>
+                    <p class="text-[0.65rem] font-medium text-slate-400 uppercase tracking-widest hidden sm:block">AI Valuation Engine</p>
+                </div>
+            </div>
+            <a href="https://aistudio.google.com/apikey" target="_blank" class="text-xs font-medium text-brand-600 bg-brand-50 px-3 py-1.5 rounded-full hover:bg-brand-100 transition-colors">
+                Get API Key <i class="fas fa-external-link-alt ml-1"></i>
+            </a>
+        </div>
+    </nav>
+
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 pt-8">
+        
+        <!-- Introduction (Mobile Friendly) -->
+        <header class="mb-8 animate-fade-in">
+            <h2 class="text-3xl font-serif font-semibold text-slate-900 mb-2">Generate Property Reports</h2>
+            <p class="text-slate-500">Create comprehensive, data-driven real estate valuations using Gemini AI with web grounding.</p>
+        </header>
+
+        <form id="reportForm" class="space-y-6">
+            
+            <!-- Main Input Card -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up">
+                <div class="p-1 bg-gradient-to-r from-brand-500 via-purple-500 to-pink-500 opacity-20 h-1"></div>
+                <div class="p-6 sm:p-8 space-y-6">
+                    
+                    <!-- Property Address -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Subject Property</label>
+                        <div class="input-group mb-2">
+                            <i class="fas fa-search input-icon"></i>
+                            <input type="text" id="propertyAddress" class="custom-input" placeholder="e.g. 123 Maple Ave, Springfield, IL">
+                        </div>
+                    </div>
+
+                    <!-- PDF & Details Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- File Upload -->
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-2">Docs & Photos (Optional)</label>
+                            <div class="relative">
+                                <input type="file" id="propertyPdf" accept="application/pdf,image/*" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                                <div class="custom-file-upload">
+                                    <i class="fas fa-cloud-upload-alt text-2xl text-slate-400 mb-2"></i>
+                                    <p class="text-sm font-medium text-slate-600">Tap to upload files</p>
+                                    <p class="text-xs text-slate-400 mt-1">PDFs, photos, tax records, etc.</p>
+                                </div>
+                            </div>
+                            <div id="pdfUploadStatus" class="upload-status">
+                                <span id="pdfUploadPill" class="status-pill">No file</span>
+                                <span id="pdfUploadName" class="text-slate-500">Upload optional supporting docs.</span>
+                            </div>
+                            <div id="pdfUploadPreviews" class="upload-previews hidden" aria-live="polite"></div>
+                        </div>
+
+                        <!-- Additional Details -->
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-2">Property Details</label>
+                            <textarea id="additionalDetails" rows="4" class="custom-input !pl-4 !py-3 resize-none" placeholder="Beds, baths, sqft, condition, updates..."></textarea>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Configuration Accordion -->
+            <details class="group bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up" style="animation-delay: 0.1s;">
+                <summary class="flex items-center justify-between p-6 cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500">
+                            <i class="fas fa-cog"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-slate-800">Configuration & API</h3>
+                            <p class="text-xs text-slate-500">Setup your API key and model preferences</p>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-down text-slate-400 transition-transform group-open:rotate-180"></i>
+                </summary>
+                
+                <div class="p-6 border-t border-slate-100 grid gap-6 md:grid-cols-2">
+                    <!-- API Key -->
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Gemini API Key</label>
+                        <div class="input-group !mb-1">
+                            <i class="fas fa-key input-icon"></i>
+                            <input type="password" id="apiKey" class="custom-input" placeholder="Enter your API Key">
+                        </div>
+                        <div class="flex items-center gap-2 mt-2">
+                            <input type="checkbox" id="rememberApiKey" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                            <label for="rememberApiKey" class="text-sm text-slate-500">Remember on this device</label>
+                        </div>
+                    </div>
+
+                    <!-- Model Selection -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">AI Model</label>
+                        <div class="relative">
+                            <i class="fas fa-microchip absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
+                            <select id="modelSelect" class="custom-input appearance-none bg-white">
+                                <option value="gemini-3-pro-preview">Gemini 3 Pro (Preview)</option>
+                                <option value="gemini-3-flash-preview" selected>Gemini 3 Flash (Preview)</option>
+                                <option value="gemini-flash-latest">Gemini 2.5 Flash</option>
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                            </select>
+                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                        </div>
+                    </div>
+
+                    <!-- Report Audience -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Target Audience</label>
+                        <div class="relative">
+                            <i class="fas fa-users absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
+                            <select id="reportAudience" class="custom-input appearance-none bg-white">
+                                <option value="buyer" selected>Buyer (Negotiation)</option>
+                                <option value="seller">Seller (Pricing)</option>
+                                <option value="investor">Investor (ROI)</option>
+                            </select>
+                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                        </div>
+                    </div>
+
+                    <!-- Prompt Style -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Analysis Style</label>
+                        <div class="relative">
+                            <i class="fas fa-scroll absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
+                            <select id="promptSelect" class="custom-input appearance-none bg-white">
+                                <option value="standard" selected>Standard Valuation</option>
+                                <option value="experimental">Bank-Grade CMA (Strict)</option>
+                            </select>
+                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                        </div>
+                    </div>
+
+                    <!-- Reports Count -->
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Sample Size</label>
+                        <div class="relative">
+                            <i class="fas fa-layer-group absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
+                            <select id="reportCount" class="custom-input appearance-none bg-white">
+                                <option value="1">1 Report</option>
+                                <option value="3" selected>3 Reports (Best Balance)</option>
+                                <option value="5">5 Reports</option>
+                                <option value="10">10 Reports (Deep Dive)</option>
+                            </select>
+                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                        </div>
+                    </div>
+
+                    <!-- Hidden Fields (Required for Logic) -->
+                    <div class="hidden">
+                        <select id="concurrency"><option value="2" selected>2</option></select>
+                        <textarea id="specialInstructions"></textarea>
+                    </div>
+
+                    <!-- Search Toggle -->
+                    <div class="md:col-span-2 flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                                <i class="fas fa-globe"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-semibold text-sm text-slate-800">Web Search Grounding</h4>
+                                <p class="text-xs text-slate-500">Enable real-time data from search engines</p>
+                            </div>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="enableSearch" class="sr-only peer" checked>
+                            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-600"></div>
+                        </label>
+                    </div>
+
+                </div>
+            </details>
+
+            <!-- Instructions (Collapsed) -->
+            <details class="group bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up" style="animation-delay: 0.15s;">
+                <summary class="flex items-center justify-between p-4 px-6 cursor-pointer bg-white hover:bg-slate-50 transition-colors">
+                    <span class="text-sm font-semibold text-slate-600">Add Special Instructions?</span>
+                    <i class="fas fa-plus text-xs text-slate-400 transition-transform group-open:rotate-45"></i>
+                </summary>
+                <div class="p-6 pt-0">
+                    <textarea id="visibleInstructions" rows="2" class="custom-input !pl-4 !py-3 resize-none mt-2" placeholder="Focus on school district, recent roof repairs, etc..."></textarea>
+                </div>
+            </details>
+
+            <!-- Sticky Bottom Action Bar -->
+            <div class="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-lg border-t border-slate-200 z-40">
+                <div class="max-w-4xl mx-auto flex items-center gap-4">
+                    <button type="submit" id="generateBtn" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3.5 px-6 rounded-xl shadow-lg shadow-brand-500/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-lg">
+                        <i class="fas fa-bolt"></i>
+                        <span>Generate Analysis</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <!-- Progress Dashboard -->
+        <div id="progressSection" class="hidden mt-8 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden animate-slide-up">
+            <div class="p-6 bg-slate-900 text-white">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 id="progressTitle" class="text-lg font-semibold flex items-center gap-2">
+                        <i class="fas fa-circle-notch fa-spin text-brand-500"></i>
+                        Running Analysis...
+                    </h3>
+                    <span id="progressText" class="text-sm font-mono text-slate-400 bg-slate-800 px-3 py-1 rounded-full">0/0</span>
+                </div>
+                <!-- Progress Bar -->
+                <div class="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div id="progressBar" class="h-full bg-brand-500 transition-all duration-500 ease-out" style="width: 0%"></div>
+                </div>
+            </div>
+            
+            <!-- Live Logs -->
+            <div id="reportStatusList" class="p-4 max-h-60 overflow-y-auto bg-slate-50 border-t border-slate-100 space-y-2">
+                <!-- Status items injected here -->
+            </div>
+        </div>
+
+        <!-- Output Container -->
+        <div id="outputWrapper" class="space-y-8 mt-8 pb-10">
+            
+            <!-- Final Merged Report -->
+            <div id="finalReportSection" class="hidden">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+                    <h2 class="text-2xl font-serif font-bold text-slate-900 flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-sm"><i class="fas fa-check"></i></span>
+                        Final Consensus
+                    </h2>
+                    <button id="downloadPdfBtn" disabled class="w-full sm:w-auto px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i class="fas fa-file-pdf text-red-500"></i> Download PDF
+                    </button>
+                </div>
+
+                <p id="finalReportStatus" class="text-sm text-slate-500 italic mb-4">Initializing merger...</p>
+
+                <!-- Paper Sheet Effect -->
+                <div class="bg-white rounded-xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
+                    <div class="h-2 bg-gradient-to-r from-brand-500 to-emerald-500"></div>
+                    <div id="finalReportContent" class="prose max-w-none p-8 sm:p-12"></div>
+                </div>
+                
+                <div class="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-3">
+                    <i class="fas fa-exclamation-triangle mt-1"></i>
+                    <p class="m-0"><strong>Disclaimer:</strong> This is an AI-generated estimate based on public data. It is not an official appraisal. Consult a licensed professional for financial decisions.</p>
+                </div>
+            </div>
+
+            <!-- Individual Reports Accordion List -->
+            <div id="reportsContainer" class="space-y-4"></div>
+        </div>
+
+    </div>
+
+    <!-- Original Logic Script (Unchanged) -->
+    <script src="app.js"></script>
+</body>
+</html>
