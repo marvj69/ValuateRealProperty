@@ -411,7 +411,7 @@ Identify 2 active listings that the subject property will be fighting against fo
             additionalDetails: '',
             specialInstructions: '',
             reportAudience: 'buyer',
-            enableSearch: false,
+            enableSearch: true,
             inferredAddress: ''
         };
         
@@ -482,7 +482,7 @@ Identify 2 active listings that the subject property will be fighting against fo
             const specialInstructions = document.getElementById('specialInstructions').value.trim();
             const reportAudience = document.getElementById('reportAudience').value;
             const reportCount = parseInt(document.getElementById('reportCount').value);
-            const enableSearch = document.getElementById('enableSearch').checked;
+            const enableSearch = true;
 
             if (!apiKey || (!propertyAddress && propertyFiles.length === 0)) {
                 alert('Please provide an API key and either a property address or attachments.');
