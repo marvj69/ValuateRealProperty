@@ -249,9 +249,15 @@ Identify 2 active listings that the subject property will be fighting against fo
         const HISTORY_STORE_NAME = 'reports';
         const HISTORY_STORAGE_KEY = 'valuate:history';
         const HISTORY_MAX_ITEMS = 50;
+        const JOBS_DB_NAME = 'valuate-jobs';
+        const JOBS_STORE_NAME = 'jobs';
         let historyDbPromise = null;
         let historyStorageMode = null;
         let historyCache = [];
+        let jobsDbPromise = null;
+        let activeJobId = null;
+        let backgroundModeActive = false;
+        const renderedReportIndices = new Set();
         const safeStorage = {
             get(key) {
                 try {
@@ -284,6 +290,189 @@ Identify 2 active listings that the subject property will be fighting against fo
         function setNewValuationVisibility(shouldShow) {
             if (!newValuationBtn) return;
             newValuationBtn.classList.toggle('hidden', !shouldShow);
+        }
+
+        function supportsBackgroundProcessing() {
+            return 'serviceWorker' in navigator && 'SyncManager' in window;
+        }
+
+        async function sendJobToServiceWorker(job) {
+            if (!('serviceWorker' in navigator)) return false;
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                if (registration.active) {
+                    registration.active.postMessage({ type: 'QUEUE_JOB', jobId: job.id });
+                }
+                if ('sync' in registration) {
+                    await registration.sync.register('valuation-sync');
+                } else if (registration.active) {
+                    registration.active.postMessage({ type: 'PROCESS_QUEUE' });
+                }
+                return true;
+            } catch (error) {
+                console.warn('Background sync unavailable.', error);
+                return false;
+            }
+        }
+
+        async function handleJobUpdate(jobId) {
+            const job = await getJob(jobId);
+            if (!job) return;
+            applyJobToUi(job);
+        }
+
+        function applyJobToUi(job) {
+            if (!job) return;
+            const reportCount = job.progress?.total || job.payload?.reportCount || 0;
+            if (reportCount > 0 && (job.status === 'running' || job.status === 'queued')) {
+                if (progressSection.classList.contains('hidden') || reportStatusList.children.length === 0) {
+                    prepareUiForRun(reportCount);
+                }
+            }
+            totalReports = reportCount;
+            completedCount = job.progress?.completed || 0;
+            updateProgress();
+
+            if (job.payload) {
+                requestState.apiKey = job.payload.apiKey || requestState.apiKey;
+                requestState.model = job.payload.model || requestState.model;
+                requestState.promptKey = job.payload.promptKey || requestState.promptKey;
+                requestState.propertyAddress = job.payload.propertyAddress || '';
+                requestState.additionalDetails = job.payload.additionalDetails || '';
+                requestState.specialInstructions = job.payload.specialInstructions || '';
+                requestState.reportAudience = job.payload.reportAudience || requestState.reportAudience;
+                requestState.enableSearch = Boolean(job.payload.enableSearch);
+            }
+
+            const reportsByIndex = Array.isArray(job.reports) ? job.reports : [];
+            for (let i = 0; i < reportCount; i++) {
+                const report = reportsByIndex[i];
+                if (report?.success) {
+                    reports[i] = report;
+                    updateStatus(i, 'success', 'Completed');
+                    if (!renderedReportIndices.has(i)) {
+                        displayReport(i, report.content, report.searchSuggestions || []);
+                        renderedReportIndices.add(i);
+                    }
+                    continue;
+                }
+                if (report?.error) {
+                    reports[i] = report;
+                    updateStatus(i, 'error', `Error: ${report.error}`);
+                    continue;
+                }
+                if (job.status === 'running' && job.runningIndex === i) {
+                    updateStatus(i, 'running', 'Generating...');
+                    continue;
+                }
+                updateStatus(i, 'pending', 'Queued');
+            }
+
+            if (job.status === 'running') {
+                progressTitle.innerHTML = '<i class="fas fa-spinner fa-spin text-brand-500"></i>Running in Background';
+                if (job.phase === 'validating') {
+                    finalReportStatus.textContent = 'Validating comparable sales...';
+                } else if (job.phase === 'merging') {
+                    finalReportStatus.textContent = 'Generating final merged report...';
+                } else {
+                    finalReportStatus.textContent = 'Generating reports in the background. You can close this app.';
+                }
+                return;
+            }
+
+            if (job.status === 'completed' && job.finalReport?.content) {
+                backgroundModeActive = false;
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '<i class="fas fa-bolt"></i><span>Generate Analysis</span>';
+                if (newValuationBtn) {
+                    newValuationBtn.disabled = false;
+                }
+                progressTitle.innerHTML = '<i class="fas fa-check-circle text-green-500"></i>Analysis Complete';
+                finalReportSection.classList.remove('hidden');
+                finalReportContent.innerHTML = markdownToHtml(job.finalReport.content);
+                finalReportStatus.textContent = '';
+                requestState.finalValueRange = job.finalReport.valueRange || null;
+                requestState.inferredAddress = job.finalReport.inferredAddress || '';
+                updateDownloadButtonState(true);
+                setNewValuationVisibility(true);
+                refreshHistoryList();
+                return;
+            }
+
+            if (job.status === 'error') {
+                backgroundModeActive = false;
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = '<i class="fas fa-bolt"></i><span>Generate Analysis</span>';
+                if (newValuationBtn) {
+                    newValuationBtn.disabled = false;
+                }
+                progressTitle.innerHTML = '<i class="fas fa-exclamation-circle text-red-500"></i>Analysis Failed';
+                finalReportSection.classList.remove('hidden');
+                finalReportStatus.textContent = job.error || 'Background processing failed.';
+                updateDownloadButtonState(false);
+                setNewValuationVisibility(true);
+            }
+        }
+
+        async function resumeActiveJob() {
+            const job = await findLatestActiveJob();
+            if (!job) return;
+            activeJobId = job.id;
+            backgroundModeActive = true;
+            renderedReportIndices.clear();
+            prepareUiForRun(job.progress?.total || job.payload?.reportCount || 0);
+            applyJobToUi(job);
+        }
+
+        function prepareUiForRun(reportCount) {
+            reports = [];
+            completedCount = 0;
+            totalReports = reportCount;
+
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Generating Reports...';
+            if (newValuationBtn) {
+                newValuationBtn.disabled = true;
+            }
+            setNewValuationVisibility(false);
+            progressTitle.innerHTML = '<i class="fas fa-spinner fa-spin text-brand-500"></i>Generating Reports...';
+            progressSection.classList.remove('hidden');
+            finalReportSection.classList.add('hidden');
+            updateDownloadButtonState(false);
+            finalReportStatus.textContent = 'Waiting for reports...';
+            finalReportContent.innerHTML = '';
+            reportsContainer.innerHTML = '';
+            reportStatusList.innerHTML = '';
+
+            for (let i = 0; i < reportCount; i++) {
+                const statusItem = document.createElement('div');
+                statusItem.id = `status-${i}`;
+                statusItem.className = 'flex items-center gap-3 p-3 rounded-lg bg-white border border-slate-100 text-sm';
+                statusItem.innerHTML = `
+                    <div class="w-2 h-2 rounded-full bg-slate-300"></div>
+                    <span class="text-slate-500">Report ${i + 1}: Waiting...</span>
+                `;
+                reportStatusList.appendChild(statusItem);
+            }
+
+            updateProgress();
+        }
+
+        async function startBackgroundValuation(job) {
+            backgroundModeActive = true;
+            activeJobId = job.id;
+            renderedReportIndices.clear();
+            try {
+                await saveJob(job);
+                const sent = await sendJobToServiceWorker(job);
+                if (!sent) {
+                    throw new Error('Background processing unavailable.');
+                }
+            } catch (error) {
+                backgroundModeActive = false;
+                activeJobId = null;
+                throw error;
+            }
         }
 
         function isSupportedAttachment(file) {
@@ -431,6 +620,7 @@ Identify 2 active listings that the subject property will be fighting against fo
         setNewValuationVisibility(false);
         downloadPdfBtn.addEventListener('click', saveFinalReportAsPDF);
         refreshHistoryList();
+        resumeActiveJob();
 
         function resetValuationForm() {
             form?.reset();
@@ -482,6 +672,9 @@ Identify 2 active listings that the subject property will be fighting against fo
             requestState.specialInstructions = '';
             requestState.inferredAddress = '';
             requestState.finalValueRange = null;
+            activeJobId = null;
+            backgroundModeActive = false;
+            renderedReportIndices.clear();
         }
 
         if (settingsToggle) {
@@ -609,42 +802,9 @@ Identify 2 active listings that the subject property will be fighting against fo
             requestState.enableSearch = enableSearch;
             requestState.finalValueRange = null;
 
-            // Reset state
-            reports = [];
-            completedCount = 0;
-            totalReports = reportCount;
-
-            // Update UI
-            generateBtn.disabled = true;
-            generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Generating Reports...';
-            if (newValuationBtn) {
-                newValuationBtn.disabled = true;
-            }
-            setNewValuationVisibility(false);
-            progressTitle.innerHTML = '<i class="fas fa-spinner fa-spin text-brand-500"></i>Generating Reports...';
-            progressSection.classList.remove('hidden');
-            finalReportSection.classList.add('hidden');
-            updateDownloadButtonState(false);
-            finalReportStatus.textContent = 'Waiting for reports...';
-            finalReportContent.innerHTML = '';
-            reportsContainer.innerHTML = '';
-            reportStatusList.innerHTML = '';
-            // Scroll to progress
+            prepareUiForRun(reportCount);
             progressSection.scrollIntoView({ behavior: 'smooth' });
-
-            // Initialize status items
-            for (let i = 0; i < reportCount; i++) {
-                const statusItem = document.createElement('div');
-                statusItem.id = `status-${i}`;
-                statusItem.className = 'flex items-center gap-3 p-3 rounded-lg bg-white border border-slate-100 text-sm';
-                statusItem.innerHTML = `
-                    <div class="w-2 h-2 rounded-full bg-slate-300"></div>
-                    <span class="text-slate-500">Report ${i + 1}: Waiting...</span>
-                `;
-                reportStatusList.appendChild(statusItem);
-            }
-
-            updateProgress();
+            await ensureNotificationPermission();
 
             // Build prompt
             const isExperimental = promptKey === 'experimental';
@@ -668,6 +828,48 @@ Identify 2 active listings that the subject property will be fighting against fo
                 .replace('{{SPECIAL_INSTRUCTIONS}}', instructionsBlock)
                 .replace('{{PDF_NOTE}}', attachmentNote)
                 .replace('{{REPORT_AUDIENCE}}', reportAudience);
+
+            const shouldBackground = supportsBackgroundProcessing();
+            if (shouldBackground) {
+                const job = {
+                    id: generateJobId(),
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                    status: 'queued',
+                    phase: 'reports',
+                    runningIndex: null,
+                    progress: {
+                        total: reportCount,
+                        completed: 0
+                    },
+                    error: null,
+                    payload: {
+                        apiKey,
+                        model,
+                        promptKey,
+                        prompt,
+                        enableSearch,
+                        reportCount,
+                        reportAudience,
+                        propertyAddress,
+                        additionalDetails,
+                        specialInstructions,
+                        attachments: attachmentPayloads
+                    },
+                    reports: [],
+                    finalReport: null
+                };
+
+                try {
+                    finalReportStatus.textContent = 'Generating reports in the background. You can close this app.';
+                    progressTitle.innerHTML = '<i class="fas fa-spinner fa-spin text-brand-500"></i>Running in Background';
+                    await startBackgroundValuation(job);
+                    return;
+                } catch (error) {
+                    console.warn('Background processing failed; continuing in foreground.', error);
+                    finalReportStatus.textContent = 'Background processing unavailable. Keep this tab open while we generate your report.';
+                }
+            }
 
             const MAX_REPORT_RETRIES = 2;
             const RETRY_DELAY_MS = 1500;
@@ -1178,6 +1380,10 @@ ${reportsText}`;
                 }
                 finalReportStatus.textContent = ''; // Clear status on success
                 await persistFinalReport(result.content, requestState.finalValueRange);
+                if (!backgroundModeActive) {
+                    const addressLabel = requestState.propertyAddress?.trim() || requestState.inferredAddress?.trim() || 'Your valuation';
+                    notifyReportReady('Valuation ready', `Your report for ${addressLabel} is ready.`);
+                }
                 setNewValuationVisibility(true);
             } catch (error) {
                 finalReportStatus.textContent = `Final report failed: ${error.message}`;
@@ -1607,6 +1813,13 @@ async function saveFinalReportAsPDF() {
             return `hist-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         }
 
+        function generateJobId() {
+            if (window.crypto?.randomUUID) {
+                return window.crypto.randomUUID();
+            }
+            return `job-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
+
         function normalizeHistoryModel(model) {
             if (!model) return 'Unknown model';
             return model.replace(/^models\//i, '');
@@ -1668,6 +1881,100 @@ async function saveFinalReportAsPDF() {
                 request.onerror = () => reject(request.error);
             });
             return historyDbPromise;
+        }
+
+        function openJobsDb() {
+            if (jobsDbPromise) return jobsDbPromise;
+            jobsDbPromise = new Promise((resolve, reject) => {
+                const request = indexedDB.open(JOBS_DB_NAME, 1);
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains(JOBS_STORE_NAME)) {
+                        const store = db.createObjectStore(JOBS_STORE_NAME, { keyPath: 'id' });
+                        store.createIndex('status', 'status');
+                        store.createIndex('updatedAt', 'updatedAt');
+                    }
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+            return jobsDbPromise;
+        }
+
+        async function saveJob(job) {
+            if (!supportsIndexedDb()) return;
+            const db = await openJobsDb();
+            await new Promise((resolve, reject) => {
+                const tx = db.transaction(JOBS_STORE_NAME, 'readwrite');
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+                tx.objectStore(JOBS_STORE_NAME).put(job);
+            });
+        }
+
+        async function getJob(jobId) {
+            if (!supportsIndexedDb()) return null;
+            const db = await openJobsDb();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(JOBS_STORE_NAME, 'readonly');
+                const request = tx.objectStore(JOBS_STORE_NAME).get(jobId);
+                request.onsuccess = () => resolve(request.result || null);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function listJobs() {
+            if (!supportsIndexedDb()) return [];
+            const db = await openJobsDb();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(JOBS_STORE_NAME, 'readonly');
+                const request = tx.objectStore(JOBS_STORE_NAME).getAll();
+                request.onsuccess = () => resolve(request.result || []);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function findLatestActiveJob() {
+            const jobs = await listJobs();
+            const active = jobs
+                .filter((job) => job && (job.status === 'queued' || job.status === 'running'))
+                .sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+            return active[0] || null;
+        }
+
+        async function ensureNotificationPermission() {
+            if (typeof Notification === 'undefined') return false;
+            if (Notification.permission === 'granted') return true;
+            if (Notification.permission === 'denied') return false;
+            try {
+                const result = Notification.requestPermission();
+                if (result && typeof result.then === 'function') {
+                    return (await result) === 'granted';
+                }
+                return result === 'granted';
+            } catch (error) {
+                return false;
+            }
+        }
+
+        async function notifyReportReady(title, body) {
+            if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+            try {
+                if ('serviceWorker' in navigator) {
+                    const registration = await navigator.serviceWorker.ready;
+                    await registration.showNotification(title, {
+                        body,
+                        icon: './icons/icon-192.png',
+                        badge: './icons/icon-192-maskable.png',
+                        tag: 'valuation-ready',
+                        renotify: true
+                    });
+                    return;
+                }
+                new Notification(title, { body });
+            } catch (error) {
+                // Ignore notification errors
+            }
         }
 
         async function ensureHistoryStorageMode() {
@@ -1933,6 +2240,18 @@ async function saveFinalReportAsPDF() {
                     .catch((error) => {
                         console.warn('Service worker registration failed:', error);
                     });
+            });
+
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                const data = event.data || {};
+                if (!data.jobId) return;
+                if (!activeJobId) {
+                    activeJobId = data.jobId;
+                    backgroundModeActive = true;
+                    renderedReportIndices.clear();
+                }
+                if (data.jobId !== activeJobId) return;
+                handleJobUpdate(data.jobId);
             });
         }
 
