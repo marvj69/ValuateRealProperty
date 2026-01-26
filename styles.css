@@ -62,8 +62,6 @@
 
         .settings-toggle {
             position: absolute;
-            top: 16px;
-            right: 16px;
             width: 38px;
             height: 38px;
             border-radius: 999px;
@@ -75,6 +73,14 @@
             justify-content: center;
             box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
             transition: all 0.2s ease;
+        }
+        .settings-toggle--inline {
+            top: 50%;
+            right: 10px;
+            transform: translateY(-50%);
+        }
+        .input-group.has-settings-action .custom-input {
+            padding-right: 3.5rem;
         }
         .settings-toggle:hover {
             color: #0f172a;
