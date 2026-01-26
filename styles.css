@@ -60,10 +60,16 @@
             background: #f0f9ff;
         }
 
+        .address-input-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .address-input-row .input-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
         .settings-toggle {
-            position: absolute;
-            top: 16px;
-            right: 16px;
             width: 38px;
             height: 38px;
             border-radius: 999px;
@@ -75,6 +81,10 @@
             justify-content: center;
             box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
             transition: all 0.2s ease;
+        }
+        .settings-toggle--inline {
+            flex-shrink: 0;
+            position: static;
         }
         .settings-toggle:hover {
             color: #0f172a;
