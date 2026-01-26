@@ -237,6 +237,10 @@ Identify 2 active listings that the subject property will be fighting against fo
         const historyRefresh = document.getElementById('historyRefresh');
         const historyClear = document.getElementById('historyClear');
         const historyCountBadge = document.getElementById('historyCountBadge');
+        const settingsToggle = document.getElementById('settingsToggle');
+        const settingsModal = document.getElementById('settingsModal');
+        const settingsOverlay = document.getElementById('settingsOverlay');
+        const settingsClose = document.getElementById('settingsClose');
 
         const API_KEY_STORAGE = 'valuate:geminiApiKey';
         const HISTORY_DB_NAME = 'valuate-history';
@@ -419,6 +423,17 @@ Identify 2 active listings that the subject property will be fighting against fo
         downloadPdfBtn.addEventListener('click', saveFinalReportAsPDF);
         refreshHistoryList();
 
+        if (settingsToggle) {
+            settingsToggle.addEventListener('click', () => {
+                openSettingsModal();
+            });
+        }
+        if (settingsOverlay) {
+            settingsOverlay.addEventListener('click', closeSettingsModal);
+        }
+        if (settingsClose) {
+            settingsClose.addEventListener('click', closeSettingsModal);
+        }
         if (historyToggle) {
             historyToggle.addEventListener('click', () => {
                 refreshHistoryList();
@@ -462,6 +477,10 @@ Identify 2 active listings that the subject property will be fighting against fo
             });
         }
         document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && settingsModal && !settingsModal.classList.contains('hidden')) {
+                closeSettingsModal();
+                return;
+            }
             if (event.key === 'Escape' && historyDrawer && !historyDrawer.classList.contains('hidden')) {
                 closeHistoryDrawer();
             }
@@ -1655,6 +1674,29 @@ async function saveFinalReportAsPDF() {
             } catch (error) {
                 console.warn('Failed to load saved valuations.', error);
             }
+        }
+
+        function openSettingsModal() {
+            if (!settingsModal) return;
+            settingsModal.classList.remove('hidden');
+            settingsModal.setAttribute('aria-hidden', 'false');
+            requestAnimationFrame(() => {
+                settingsModal.classList.add('is-open');
+            });
+            if (settingsClose) {
+                settingsClose.focus();
+            }
+        }
+
+        function closeSettingsModal() {
+            if (!settingsModal) return;
+            settingsModal.classList.remove('is-open');
+            settingsModal.setAttribute('aria-hidden', 'true');
+            setTimeout(() => {
+                if (!settingsModal.classList.contains('is-open')) {
+                    settingsModal.classList.add('hidden');
+                }
+            }, 250);
         }
 
         function openHistoryDrawer() {
