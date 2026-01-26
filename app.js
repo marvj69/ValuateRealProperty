@@ -416,7 +416,8 @@ Identify 2 active listings that the subject property will be fighting against fo
             specialInstructions: '',
             reportAudience: 'buyer',
             enableSearch: true,
-            inferredAddress: ''
+            inferredAddress: '',
+            finalValueRange: null
         };
         
         updateDownloadButtonState(false);
@@ -538,6 +539,7 @@ Identify 2 active listings that the subject property will be fighting against fo
             requestState.specialInstructions = specialInstructions;
             requestState.reportAudience = reportAudience;
             requestState.enableSearch = enableSearch;
+            requestState.finalValueRange = null;
 
             // Reset state
             reports = [];
@@ -826,6 +828,73 @@ Identify 2 active listings that the subject property will be fighting against fo
             return valuations;
         }
 
+        function mergeValueRange(valuations, valueRangeOverride) {
+            if (!valueRangeOverride?.rangeLow || !valueRangeOverride?.rangeHigh) {
+                return valuations;
+            }
+            return {
+                ...valuations,
+                rangeLow: valueRangeOverride.rangeLow,
+                rangeHigh: valueRangeOverride.rangeHigh
+            };
+        }
+
+        async function inferValueRangeFromReport(reportText) {
+            const cleanedText = (reportText || '').replace(/\s+/g, ' ').trim();
+            if (!cleanedText || !requestState.apiKey) {
+                return null;
+            }
+
+            const prompt = `You are a valuation range extraction assistant.
+Read the report and return ONLY a JSON object with numeric rangeLow and rangeHigh values.
+Use whole numbers without commas or currency symbols.
+If no clear value range is present, return "UNKNOWN".
+
+Report:
+${cleanedText}`;
+
+            const result = await callGeminiAPI(
+                requestState.apiKey,
+                'gemini-flash-lite-latest',
+                prompt,
+                false,
+                0,
+                []
+            );
+
+            const responseText = (result?.content || '').trim();
+            if (!responseText || /unknown/i.test(responseText)) {
+                return null;
+            }
+
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            let parsed = null;
+            if (jsonMatch) {
+                try {
+                    parsed = JSON.parse(jsonMatch[0]);
+                } catch (error) {
+                    parsed = null;
+                }
+            }
+
+            const parseNumber = (value) => {
+                if (value === null || value === undefined) return null;
+                const numeric = parseFloat(String(value).replace(/,/g, ''));
+                return Number.isFinite(numeric) ? numeric : null;
+            };
+
+            const rangeLow = parseNumber(parsed?.rangeLow ?? parsed?.low ?? parsed?.min);
+            const rangeHigh = parseNumber(parsed?.rangeHigh ?? parsed?.high ?? parsed?.max);
+
+            if (!rangeLow || !rangeHigh) {
+                return null;
+            }
+
+            return rangeLow <= rangeHigh
+                ? { rangeLow, rangeHigh }
+                : { rangeLow: rangeHigh, rangeHigh: rangeLow };
+        }
+
         async function inferAddressFromFinalReport(reportText) {
             const cleanedText = (reportText || '').replace(/\s+/g, ' ').trim();
             if (!cleanedText || !requestState.apiKey || !requestState.model) {
@@ -1022,10 +1091,17 @@ ${reportsText}`;
                     [],
                     [{ code_execution: {} }]
                 );
-                finalReportStatus.textContent = ''; // Clear status on success
+                finalReportStatus.textContent = 'Extracting value range...';
                 finalReportContent.innerHTML = markdownToHtml(result.content);
                 updateDownloadButtonState(true);
-                await persistFinalReport(result.content);
+                try {
+                    requestState.finalValueRange = await inferValueRangeFromReport(result.content);
+                } catch (error) {
+                    requestState.finalValueRange = null;
+                    console.warn('Failed to infer value range from final report:', error);
+                }
+                finalReportStatus.textContent = ''; // Clear status on success
+                await persistFinalReport(result.content, requestState.finalValueRange);
             } catch (error) {
                 finalReportStatus.textContent = `Final report failed: ${error.message}`;
                 updateDownloadButtonState(false);
@@ -1084,7 +1160,8 @@ async function saveFinalReportAsPDF() {
     const addressNode = document.createElement('div');
     addressNode.textContent = reportAddress;
     const safeAddress = addressNode.innerHTML;
-    const valuations = extractValuations(printContainer.textContent || '');
+    const extractedValuations = extractValuations(printContainer.textContent || '');
+    const valuations = mergeValueRange(extractedValuations, requestState.finalValueRange);
     
     const valuationRange = valuations.rangeLow && valuations.rangeHigh
         ? `${formatCurrency(valuations.rangeLow)} - ${formatCurrency(valuations.rangeHigh)}`
@@ -1731,11 +1808,21 @@ async function saveFinalReportAsPDF() {
             updateDownloadButtonState(true);
             requestState.propertyAddress = report.address || '';
             requestState.inferredAddress = report.address || '';
+            if (report.valuations?.rangeLow && report.valuations?.rangeHigh) {
+                requestState.finalValueRange = {
+                    rangeLow: report.valuations.rangeLow,
+                    rangeHigh: report.valuations.rangeHigh
+                };
+            } else {
+                requestState.finalValueRange = null;
+            }
             closeHistoryDrawer();
             finalReportSection.scrollIntoView({ behavior: 'smooth' });
         }
 
-        async function persistFinalReport(markdownContent) {
+        async function persistFinalReport(markdownContent, valueRangeOverride = null) {
+            const extractedValuations = extractValuations(markdownContent || '');
+            const mergedValuations = mergeValueRange(extractedValuations, valueRangeOverride);
             const record = {
                 id: generateHistoryId(),
                 createdAt: Date.now(),
@@ -1745,7 +1832,7 @@ async function saveFinalReportAsPDF() {
                 promptKey: requestState.promptKey || 'standard',
                 reportCount: totalReports || null,
                 enableSearch: Boolean(requestState.enableSearch),
-                valuations: extractValuations(markdownContent || ''),
+                valuations: mergedValuations,
                 content: markdownContent || ''
             };
 
