@@ -55,9 +55,12 @@
         <form id="reportForm" class="space-y-6">
             
             <!-- Main Input Card -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up relative">
                 <div class="p-1 bg-gradient-to-r from-brand-500 via-purple-500 to-pink-500 opacity-20 h-1"></div>
                 <div class="p-6 sm:p-8 space-y-6">
+                    <button id="settingsToggle" type="button" class="settings-toggle" aria-label="Open settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
                     
                     <!-- Property Address -->
                     <div>
@@ -98,22 +101,49 @@
                 </div>
             </div>
 
-            <!-- Configuration Accordion -->
-            <details class="group bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up" style="animation-delay: 0.1s;">
-                <summary class="flex items-center justify-between p-6 cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
-                    <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500">
-                            <i class="fas fa-cog"></i>
-                        </div>
-                        <div>
-                            <h3 class="font-semibold text-slate-800">Configuration & API</h3>
-                            <p class="text-xs text-slate-500">Setup your API key and model preferences</p>
-                        </div>
-                    </div>
-                    <i class="fas fa-chevron-down text-slate-400 transition-transform group-open:rotate-180"></i>
+            <!-- Hidden Fields (Required for Logic) -->
+            <div class="hidden">
+                <textarea id="specialInstructions"></textarea>
+            </div>
+
+            <!-- Instructions (Collapsed) -->
+            <details class="group bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up" style="animation-delay: 0.15s;">
+                <summary class="flex items-center justify-between p-4 px-6 cursor-pointer bg-white hover:bg-slate-50 transition-colors">
+                    <span class="text-sm font-semibold text-slate-600">Add Special Instructions?</span>
+                    <i class="fas fa-plus text-xs text-slate-400 transition-transform group-open:rotate-45"></i>
                 </summary>
-                
-                <div class="p-6 border-t border-slate-100 grid gap-6 md:grid-cols-2">
+                <div class="p-6 pt-0">
+                    <textarea id="visibleInstructions" rows="2" class="custom-input !pl-4 !py-3 resize-none mt-2" placeholder="Focus on school district, recent roof repairs, etc..."></textarea>
+                </div>
+            </details>
+
+            <!-- Sticky Bottom Action Bar -->
+            <div class="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-lg border-t border-slate-200 z-40">
+                <div class="max-w-4xl mx-auto flex items-center gap-4">
+                    <button type="submit" id="generateBtn" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3.5 px-6 rounded-xl shadow-lg shadow-brand-500/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-lg">
+                        <i class="fas fa-bolt"></i>
+                        <span>Generate Analysis</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <!-- Settings Modal -->
+        <div id="settingsModal" class="settings-modal hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+            <div id="settingsOverlay" class="settings-overlay"></div>
+            <div class="settings-panel" role="document">
+                <div class="settings-panel-header">
+                    <div>
+                        <p class="settings-eyebrow">Configuration</p>
+                        <h2 id="settingsTitle">Settings & API</h2>
+                        <p class="settings-subtitle">Manage your API key, model, and report preferences.</p>
+                    </div>
+                    <button id="settingsClose" type="button" class="settings-close" aria-label="Close settings">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div class="settings-panel-body grid gap-6 md:grid-cols-2">
                     <!-- API Key -->
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-slate-700 mb-2">Gemini API Key</label>
@@ -183,36 +213,9 @@
                             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
                         </div>
                     </div>
-
-                    <!-- Hidden Fields (Required for Logic) -->
-                    <div class="hidden">
-                        <textarea id="specialInstructions"></textarea>
-                    </div>
-
-                </div>
-            </details>
-
-            <!-- Instructions (Collapsed) -->
-            <details class="group bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up" style="animation-delay: 0.15s;">
-                <summary class="flex items-center justify-between p-4 px-6 cursor-pointer bg-white hover:bg-slate-50 transition-colors">
-                    <span class="text-sm font-semibold text-slate-600">Add Special Instructions?</span>
-                    <i class="fas fa-plus text-xs text-slate-400 transition-transform group-open:rotate-45"></i>
-                </summary>
-                <div class="p-6 pt-0">
-                    <textarea id="visibleInstructions" rows="2" class="custom-input !pl-4 !py-3 resize-none mt-2" placeholder="Focus on school district, recent roof repairs, etc..."></textarea>
-                </div>
-            </details>
-
-            <!-- Sticky Bottom Action Bar -->
-            <div class="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-lg border-t border-slate-200 z-40">
-                <div class="max-w-4xl mx-auto flex items-center gap-4">
-                    <button type="submit" id="generateBtn" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3.5 px-6 rounded-xl shadow-lg shadow-brand-500/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-lg">
-                        <i class="fas fa-bolt"></i>
-                        <span>Generate Analysis</span>
-                    </button>
                 </div>
             </div>
-        </form>
+        </div>
 
         <!-- Progress Dashboard -->
         <div id="progressSection" class="hidden mt-8 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden animate-slide-up">
