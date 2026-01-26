@@ -144,15 +144,6 @@
             display: none;
         }
 
-        /* Toggle Switch */
-        .toggle-checkbox:checked {
-            right: 0;
-            border-color: #0ea5e9;
-        }
-        .toggle-checkbox:checked + .toggle-label {
-            background-color: #0ea5e9;
-        }
-        
         /* Report Typography */
         .prose h1 { font-family: 'Newsreader', serif; font-weight: 700; font-size: 2rem; color: #1e293b; margin-top: 2rem; margin-bottom: 1rem; line-height: 1.2; }
         .prose h2 { font-family: 'Newsreader', serif; font-weight: 600; font-size: 1.5rem; color: #334155; margin-top: 1.5rem; margin-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }
