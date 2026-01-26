@@ -79,8 +79,19 @@
             right: 10px;
             transform: translateY(-50%);
         }
+        .input-group.has-settings-action {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
         .input-group.has-settings-action .custom-input {
-            padding-right: 3.5rem;
+            flex: 1;
+            padding-right: 1rem;
+        }
+        .input-group.has-settings-action .settings-toggle--inline {
+            position: static;
+            transform: none;
+            flex-shrink: 0;
         }
         .settings-toggle:hover {
             color: #0f172a;
