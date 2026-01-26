@@ -281,6 +281,11 @@ Identify 2 active listings that the subject property will be fighting against fo
             rememberApiKey.checked = true;
         }
 
+        function setNewValuationVisibility(shouldShow) {
+            if (!newValuationBtn) return;
+            newValuationBtn.classList.toggle('hidden', !shouldShow);
+        }
+
         function isSupportedAttachment(file) {
             if (!file) return false;
             return file.type === 'application/pdf' || file.type.startsWith('image/');
@@ -423,6 +428,7 @@ Identify 2 active listings that the subject property will be fighting against fo
         };
         
         updateDownloadButtonState(false);
+        setNewValuationVisibility(false);
         downloadPdfBtn.addEventListener('click', saveFinalReportAsPDF);
         refreshHistoryList();
 
@@ -468,6 +474,7 @@ Identify 2 active listings that the subject property will be fighting against fo
             if (newValuationBtn) {
                 newValuationBtn.disabled = false;
             }
+            setNewValuationVisibility(false);
             updateDownloadButtonState(false);
 
             requestState.propertyAddress = '';
@@ -613,6 +620,7 @@ Identify 2 active listings that the subject property will be fighting against fo
             if (newValuationBtn) {
                 newValuationBtn.disabled = true;
             }
+            setNewValuationVisibility(false);
             progressTitle.innerHTML = '<i class="fas fa-spinner fa-spin text-brand-500"></i>Generating Reports...';
             progressSection.classList.remove('hidden');
             finalReportSection.classList.add('hidden');
@@ -1096,6 +1104,7 @@ ${cleanedText}`;
                 finalReportSection.classList.remove('hidden');
                 finalReportStatus.textContent = 'No successful reports to merge.';
                 updateDownloadButtonState(false);
+                setNewValuationVisibility(true);
                 return;
             }
 
@@ -1169,9 +1178,11 @@ ${reportsText}`;
                 }
                 finalReportStatus.textContent = ''; // Clear status on success
                 await persistFinalReport(result.content, requestState.finalValueRange);
+                setNewValuationVisibility(true);
             } catch (error) {
                 finalReportStatus.textContent = `Final report failed: ${error.message}`;
                 updateDownloadButtonState(false);
+                setNewValuationVisibility(true);
             }
         }
 
