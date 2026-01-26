@@ -225,6 +225,7 @@ Identify 2 active listings that the subject property will be fighting against fo
         const pdfUploadName = document.getElementById('pdfUploadName');
         const pdfUploadPreviews = document.getElementById('pdfUploadPreviews');
         const propertyPdfInput = document.getElementById('propertyPdf');
+        const specialInstructions = document.getElementById('specialInstructions');
         const attachmentState = {
             files: []
         };
@@ -237,6 +238,7 @@ Identify 2 active listings that the subject property will be fighting against fo
         const historyRefresh = document.getElementById('historyRefresh');
         const historyClear = document.getElementById('historyClear');
         const historyCountBadge = document.getElementById('historyCountBadge');
+        const newValuationBtn = document.getElementById('newValuationBtn');
         const settingsToggle = document.getElementById('settingsToggle');
         const settingsModal = document.getElementById('settingsModal');
         const settingsOverlay = document.getElementById('settingsOverlay');
@@ -424,6 +426,57 @@ Identify 2 active listings that the subject property will be fighting against fo
         downloadPdfBtn.addEventListener('click', saveFinalReportAsPDF);
         refreshHistoryList();
 
+        function resetValuationForm() {
+            form?.reset();
+            if (visibleInstructions) {
+                visibleInstructions.value = '';
+            }
+            if (specialInstructions) {
+                specialInstructions.value = '';
+            }
+            if (propertyPdfInput) {
+                propertyPdfInput.value = '';
+            }
+            setAttachmentFiles([]);
+
+            reports = [];
+            completedCount = 0;
+            totalReports = 0;
+            updateProgress();
+
+            if (progressSection) {
+                progressSection.classList.add('hidden');
+            }
+            if (reportStatusList) {
+                reportStatusList.innerHTML = '';
+            }
+            if (reportsContainer) {
+                reportsContainer.innerHTML = '';
+            }
+            if (finalReportContent) {
+                finalReportContent.innerHTML = '';
+            }
+            if (finalReportStatus) {
+                finalReportStatus.textContent = '';
+            }
+            if (finalReportSection) {
+                finalReportSection.classList.add('hidden');
+            }
+
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '<i class="fas fa-bolt"></i><span>Generate Analysis</span>';
+            if (newValuationBtn) {
+                newValuationBtn.disabled = false;
+            }
+            updateDownloadButtonState(false);
+
+            requestState.propertyAddress = '';
+            requestState.additionalDetails = '';
+            requestState.specialInstructions = '';
+            requestState.inferredAddress = '';
+            requestState.finalValueRange = null;
+        }
+
         if (settingsToggle) {
             settingsToggle.addEventListener('click', () => {
                 openSettingsModal();
@@ -456,6 +509,14 @@ Identify 2 active listings that the subject property will be fighting against fo
                 if (!confirmed) return;
                 await clearHistoryReports();
                 await refreshHistoryList();
+            });
+        }
+        if (newValuationBtn) {
+            newValuationBtn.addEventListener('click', () => {
+                const confirmed = confirm('Start a new valuation? This clears the current form and results but keeps saved reports.');
+                if (!confirmed) return;
+                resetValuationForm();
+                form?.scrollIntoView({ behavior: 'smooth' });
             });
         }
         if (historyList) {
@@ -549,6 +610,9 @@ Identify 2 active listings that the subject property will be fighting against fo
             // Update UI
             generateBtn.disabled = true;
             generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Generating Reports...';
+            if (newValuationBtn) {
+                newValuationBtn.disabled = true;
+            }
             progressTitle.innerHTML = '<i class="fas fa-spinner fa-spin text-brand-500"></i>Generating Reports...';
             progressSection.classList.remove('hidden');
             finalReportSection.classList.add('hidden');
@@ -1021,6 +1085,9 @@ ${cleanedText}`;
         function finalize() {
             generateBtn.disabled = false;
             generateBtn.innerHTML = '<i class="fas fa-bolt"></i><span>Generate Analysis</span>';
+            if (newValuationBtn) {
+                newValuationBtn.disabled = false;
+            }
             progressTitle.innerHTML = '<i class="fas fa-check-circle text-green-500"></i>Analysis Complete';
             updateDownloadButtonState(false);
 
