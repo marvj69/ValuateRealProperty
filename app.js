@@ -1171,7 +1171,7 @@ ${cleanedText}`;
 
         async function inferAddressFromFinalReport(reportText) {
             const cleanedText = (reportText || '').replace(/\s+/g, ' ').trim();
-            if (!cleanedText || !requestState.apiKey || !requestState.model) {
+            if (!cleanedText || !requestState.apiKey) {
                 return null;
             }
 
@@ -1182,7 +1182,7 @@ Choose the subject property, not comparable listings. If no clear subject addres
 Report Text:
 ${cleanedText}`;
 
-            const inferenceModel = requestState.model || 'gemini-flash-latest';
+            const inferenceModel = 'gemini-flash-lite-latest';
             const result = await callGeminiAPI(
                 requestState.apiKey,
                 inferenceModel,
@@ -2270,10 +2270,22 @@ async function saveFinalReportAsPDF() {
         async function persistFinalReport(markdownContent, valueRangeOverride = null) {
             const extractedValuations = extractValuations(markdownContent || '');
             const mergedValuations = mergeValueRange(extractedValuations, valueRangeOverride);
+            let resolvedAddress = requestState.propertyAddress?.trim() || requestState.inferredAddress?.trim() || '';
+            if (!resolvedAddress) {
+                try {
+                    const inferred = await inferAddressFromFinalReport(markdownContent || '');
+                    if (inferred) {
+                        requestState.inferredAddress = inferred;
+                        resolvedAddress = inferred;
+                    }
+                } catch (error) {
+                    console.warn('Failed to infer address for history record:', error);
+                }
+            }
             const record = {
                 id: generateHistoryId(),
                 createdAt: Date.now(),
-                address: requestState.propertyAddress?.trim() || requestState.inferredAddress?.trim() || 'Address not provided',
+                address: resolvedAddress || 'Address not provided',
                 audience: requestState.reportAudience || '',
                 model: requestState.model || '',
                 promptKey: requestState.promptKey || 'standard',
