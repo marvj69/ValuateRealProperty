@@ -1802,6 +1802,12 @@ async function saveFinalReportAsPDF() {
 
             const wrapper = document.createElement('div');
             wrapper.innerHTML = rawHtml;
+            wrapper.querySelectorAll('table').forEach((table) => {
+                const scrollWrapper = document.createElement('div');
+                scrollWrapper.className = 'table-scroll';
+                table.parentNode.insertBefore(scrollWrapper, table);
+                scrollWrapper.appendChild(table);
+            });
 
             return wrapper.innerHTML;
         }
