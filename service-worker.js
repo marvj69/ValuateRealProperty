@@ -373,7 +373,7 @@ ${cleanedText}`;
 
 async function inferAddressFromFinalReport(apiKey, model, reportText) {
   const cleanedText = (reportText || '').replace(/\s+/g, ' ').trim();
-  if (!cleanedText || !apiKey || !model) {
+  if (!cleanedText || !apiKey) {
     return null;
   }
 
@@ -386,7 +386,7 @@ ${cleanedText}`;
 
   const result = await callGeminiAPI(
     apiKey,
-    model,
+    'gemini-flash-lite-latest',
     prompt,
     false,
     0,
