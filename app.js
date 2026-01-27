@@ -606,11 +606,11 @@ Identify 2 active listings that the subject property will be fighting against fo
         const requestState = {
             apiKey: '',
             model: '',
-            promptKey: 'standard',
+            promptKey: 'experimental',
             propertyAddress: '',
             additionalDetails: '',
             specialInstructions: '',
-            reportAudience: 'buyer',
+            reportAudience: 'seller',
             enableSearch: true,
             inferredAddress: '',
             finalValueRange: null
