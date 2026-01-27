@@ -2253,6 +2253,10 @@ async function saveFinalReportAsPDF() {
             finalReportStatus.textContent = 'Loaded saved valuation.';
             finalReportContent.innerHTML = markdownToHtml(report.content || '');
             updateDownloadButtonState(true);
+            if (newValuationBtn) {
+                newValuationBtn.disabled = false;
+            }
+            setNewValuationVisibility(true);
             requestState.propertyAddress = report.address || '';
             requestState.inferredAddress = report.address || '';
             if (report.valuations?.rangeLow && report.valuations?.rangeHigh) {
