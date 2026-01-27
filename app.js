@@ -2138,13 +2138,54 @@ async function saveFinalReportAsPDF() {
             }
         }
 
+        let scrollLockY = 0;
+        let settingsLastFocus = null;
+        let historyLastFocus = null;
+
+        function lockScroll() {
+            if (document.body.classList.contains('menu-open')) return;
+            scrollLockY = window.scrollY || window.pageYOffset;
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${scrollLockY}px`;
+            document.body.style.left = '0';
+            document.body.style.right = '0';
+            document.body.classList.add('menu-open');
+            document.documentElement.classList.add('menu-open');
+        }
+
+        function unlockScroll() {
+            if (!document.body.classList.contains('menu-open')) return;
+            document.body.classList.remove('menu-open');
+            document.documentElement.classList.remove('menu-open');
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.left = '';
+            document.body.style.right = '';
+            window.scrollTo(0, scrollLockY);
+        }
+
+        function updateScrollLock() {
+            const settingsOpen = settingsModal && !settingsModal.classList.contains('hidden');
+            const historyOpen = historyDrawer && !historyDrawer.classList.contains('hidden');
+            if (settingsOpen || historyOpen) {
+                lockScroll();
+            } else {
+                unlockScroll();
+            }
+        }
+
         function openSettingsModal() {
             if (!settingsModal) return;
+            settingsLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
             settingsModal.classList.remove('hidden');
             settingsModal.setAttribute('aria-hidden', 'false');
+            if (settingsToggle) {
+                settingsToggle.setAttribute('aria-expanded', 'true');
+            }
             requestAnimationFrame(() => {
                 settingsModal.classList.add('is-open');
             });
+            updateScrollLock();
             if (settingsClose) {
                 settingsClose.focus();
             }
@@ -2154,20 +2195,33 @@ async function saveFinalReportAsPDF() {
             if (!settingsModal) return;
             settingsModal.classList.remove('is-open');
             settingsModal.setAttribute('aria-hidden', 'true');
+            if (settingsToggle) {
+                settingsToggle.setAttribute('aria-expanded', 'false');
+            }
             setTimeout(() => {
                 if (!settingsModal.classList.contains('is-open')) {
                     settingsModal.classList.add('hidden');
+                    updateScrollLock();
+                    const historyOpen = historyDrawer && !historyDrawer.classList.contains('hidden');
+                    if (settingsLastFocus && !historyOpen) {
+                        settingsLastFocus.focus();
+                    }
                 }
             }, 250);
         }
 
         function openHistoryDrawer() {
             if (!historyDrawer) return;
+            historyLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
             historyDrawer.classList.remove('hidden');
             historyDrawer.setAttribute('aria-hidden', 'false');
+            if (historyToggle) {
+                historyToggle.setAttribute('aria-expanded', 'true');
+            }
             requestAnimationFrame(() => {
                 historyDrawer.classList.add('is-open');
             });
+            updateScrollLock();
             if (historyClose) {
                 historyClose.focus();
             }
@@ -2177,9 +2231,17 @@ async function saveFinalReportAsPDF() {
             if (!historyDrawer) return;
             historyDrawer.classList.remove('is-open');
             historyDrawer.setAttribute('aria-hidden', 'true');
+            if (historyToggle) {
+                historyToggle.setAttribute('aria-expanded', 'false');
+            }
             setTimeout(() => {
                 if (!historyDrawer.classList.contains('is-open')) {
                     historyDrawer.classList.add('hidden');
+                    updateScrollLock();
+                    const settingsOpen = settingsModal && !settingsModal.classList.contains('hidden');
+                    if (historyLastFocus && !settingsOpen) {
+                        historyLastFocus.focus();
+                    }
                 }
             }, 300);
         }
