@@ -1438,6 +1438,10 @@ async function saveFinalReportAsPDF() {
         table.parentNode.insertBefore(wrapper, table);
         wrapper.appendChild(table);
     });
+    printContainer.querySelectorAll('a').forEach((link) => {
+        const textNode = document.createTextNode(link.textContent || '');
+        link.replaceWith(textNode);
+    });
 
     const reportAddress = await resolveReportAddress();
 
@@ -1463,10 +1467,6 @@ async function saveFinalReportAsPDF() {
         }
         return;
     }
-
-    const timestamp = new Date().toLocaleString(undefined, {
-        year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
 
     const disclaimerHtml = `
         <div class="footer-disclaimer">
@@ -1568,12 +1568,6 @@ async function saveFinalReportAsPDF() {
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-top: 4px;
-        }
-
-        .report-meta {
-            text-align: right;
-            font-size: 9pt;
-            color: var(--secondary);
         }
 
         /* --- Summary Section --- */
@@ -1739,9 +1733,6 @@ async function saveFinalReportAsPDF() {
             <div class="brand">
                 <h1>Valuation Report</h1>
                 <div class="subtitle">Automated Real Estate Analysis</div>
-            </div>
-            <div class="report-meta">
-                <div>Date: ${timestamp}</div>
             </div>
         </header>
 
