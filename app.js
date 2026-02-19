@@ -935,7 +935,7 @@ Identify 2 active listings that the subject property will be fighting against fo
 
         function getThinkingConfigForModel(model) {
             const normalized = normalizeModelName(model).toLowerCase();
-            if (normalized.startsWith('gemini-3-')) {
+            if (normalized.startsWith('gemini-3')) {
                 return { thinkingLevel: 'high' };
             }
             if (normalized.includes('2.5') || normalized.includes('flash-latest')) {
