@@ -121,7 +121,8 @@ Choose between two analysis approaches:
 - **PWA**: Installable Progressive Web App with manifest
 
 ### Supported Models
-- Gemini 3 Pro (Preview)
+- Gemini 3.1 Pro (Preview)
+- Gemini 3.1 Flash-Lite (Preview)
 - Gemini 3 Flash (Preview) - Recommended
 - Gemini 2.5 Flash
 - Gemini 2.5 Pro
