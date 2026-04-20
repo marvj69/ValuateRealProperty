@@ -1458,16 +1458,6 @@ async function saveFinalReportAsPDF() {
         ? formatCurrency(valuations.pointEstimate)
         : null;
 
-    const printWindow = window.open('', '_blank', 'width=1000,height=1200');
-    if (!printWindow) {
-        alert('Please enable pop-ups to save the report.');
-        if (downloadPdfBtn) {
-            downloadPdfBtn.disabled = false;
-            downloadPdfBtn.innerHTML = originalDownloadLabel;
-        }
-        return;
-    }
-
     const disclaimerHtml = `
         <div class="footer-disclaimer">
             <strong>Disclaimer:</strong> This report is an AI-generated estimate based on available data. It is not a professional appraisal. Consult a licensed appraiser for official valuations.
@@ -1495,19 +1485,16 @@ async function saveFinalReportAsPDF() {
         </div>
     `;
 
-    printWindow.document.write(`
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Real Estate Valuation Report</title>
-    <!-- Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&display=swap" rel="stylesheet">
-    
+    if (typeof html2pdf === 'undefined') {
+        alert('PDF generator failed to load. Please refresh and try again.');
+        if (downloadPdfBtn) {
+            downloadPdfBtn.disabled = false;
+            downloadPdfBtn.innerHTML = originalDownloadLabel;
+        }
+        return;
+    }
+
+    const reportHtml = `
     <style>
         :root {
             --primary: #0f172a;       /* Slate 900 */
@@ -1726,8 +1713,6 @@ async function saveFinalReportAsPDF() {
             h2 { break-after: avoid; }
         }
     </style>
-</head>
-<body>
     <div class="page-container">
         <header>
             <div class="brand">
@@ -1744,22 +1729,36 @@ async function saveFinalReportAsPDF() {
 
         ${disclaimerHtml}
     </div>
+    `;
 
-    <script>
-        // Short delay to ensure fonts and styles load before print dialog
-        window.onload = function() {
-            setTimeout(function() {
-                window.print();
-                // Optional: close window after printing (commented out for debugging)
-                window.onafterprint = function() { window.close(); };
-            }, 500);
-        };
-    <\/script>
-</body>
-</html>
-    `);
+    const renderContainer = document.createElement('div');
+    renderContainer.style.position = 'fixed';
+    renderContainer.style.left = '-99999px';
+    renderContainer.style.top = '0';
+    renderContainer.style.width = '8.5in';
+    renderContainer.innerHTML = reportHtml;
+    document.body.appendChild(renderContainer);
 
-    printWindow.document.close();
+    const reportFileName = `${reportAddress.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'valuation-report'}.pdf`;
+
+    try {
+        await html2pdf()
+            .set({
+                margin: [0.45, 0.45, 0.45, 0.45],
+                filename: reportFileName,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
+                pagebreak: { mode: ['css', 'avoid-all'] }
+            })
+            .from(renderContainer)
+            .save();
+    } catch (error) {
+        console.error('PDF export failed:', error);
+        alert('Failed to generate PDF. Please try again.');
+    } finally {
+        renderContainer.remove();
+    }
 
     if (downloadPdfBtn) {
         downloadPdfBtn.disabled = false;
