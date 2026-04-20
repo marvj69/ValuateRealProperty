@@ -7,7 +7,7 @@
 ### 🏠 Comprehensive Property Analysis
 - **Property Valuation Reports**: Generate detailed Comparative Market Analysis (CMA) reports with estimated market value ranges
 - **Web-Grounded Research**: Automatically searches for comparable sales, active listings, and market trends using Google's web search integration
-- **Multiple Report Generation**: Create 1, 3, 5, or 10 individual reports and merge them into a consensus analysis
+- **Multiple Report Generation**: Automatically generate 16 individual reports and merge them into a consensus analysis
 - **Document Support**: Upload PDFs, photos, tax records, and other property documents for enhanced analysis
 
 ### 🎯 Audience-Specific Reports
@@ -91,7 +91,7 @@ Choose between two analysis approaches:
 2. **Configure Settings** (optional)
    - Choose your target audience (Buyer/Seller/Investor)
    - Select report style (Standard or Bank-Grade CMA)
-   - Set the number of reports to generate (3 is recommended for best balance)
+   - Sample size is fixed at 16 reports for consistency
 
 3. **Generate Analysis**
    - Click "Generate Analysis"

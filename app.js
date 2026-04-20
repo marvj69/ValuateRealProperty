@@ -8,6 +8,8 @@
 
         /* --- START OF ORIGINAL LOGIC --- */
 
+        const DEFAULT_REPORT_COUNT = 16;
+
         // Prompt template
         const PROMPT_TEMPLATE = `Overall Goal: Generate a comprehensive, data-driven real estate market report and reasoned valuation estimate for a specific property, acting as an expert analyst. Crucially, prioritize reliable web search for comparable data and perform meticulous self-checking before finalizing the output.
 
@@ -762,7 +764,7 @@ Identify 2 active listings that the subject property will be fighting against fo
             const additionalDetails = document.getElementById('additionalDetails').value.trim();
             const specialInstructions = document.getElementById('specialInstructions').value.trim();
             const reportAudience = document.getElementById('reportAudience').value;
-            const reportCount = parseInt(document.getElementById('reportCount').value);
+            const reportCount = DEFAULT_REPORT_COUNT;
             const enableSearch = true;
 
             if (!apiKey || (!propertyAddress && propertyFiles.length === 0)) {
