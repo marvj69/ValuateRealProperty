@@ -1735,11 +1735,21 @@ async function saveFinalReportAsPDF() {
 
     const renderContainer = document.createElement('div');
     renderContainer.style.position = 'fixed';
-    renderContainer.style.left = '-99999px';
+    renderContainer.style.left = '0';
     renderContainer.style.top = '0';
     renderContainer.style.width = '8.5in';
+    renderContainer.style.opacity = '0';
+    renderContainer.style.pointerEvents = 'none';
+    renderContainer.style.zIndex = '-1';
+    renderContainer.style.background = '#ffffff';
     renderContainer.innerHTML = reportHtml;
     document.body.appendChild(renderContainer);
+
+    // Ensure the browser paints the container before html2canvas snapshots it.
+    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
+    if (document.fonts && typeof document.fonts.ready?.then === 'function') {
+        await document.fonts.ready;
+    }
 
     const reportFileName = `${reportAddress.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'valuation-report'}.pdf`;
 
@@ -1753,7 +1763,7 @@ async function saveFinalReportAsPDF() {
                 jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
                 pagebreak: { mode: ['css', 'avoid-all'] }
             })
-            .from(renderContainer)
+            .from(renderContainer.firstElementChild || renderContainer)
             .save();
     } catch (error) {
         console.error('PDF export failed:', error);
