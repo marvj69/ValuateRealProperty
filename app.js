@@ -1525,12 +1525,14 @@ async function saveFinalReportAsPDF() {
 
         /* --- Layout --- */
         .page-container {
+            width: 8.5in;
             max-width: 8.5in;
-            margin: 40px auto;
+            margin: 0;
             background: var(--bg-white);
-            padding: 50px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            border: 1px solid var(--border);
+            padding: 0.5in;
+            box-shadow: none;
+            border: none;
+            overflow: visible;
         }
 
         /* --- Header --- */
@@ -1733,20 +1735,6 @@ async function saveFinalReportAsPDF() {
     </div>
     `;
 
-    const renderContainer = document.createElement('div');
-    renderContainer.style.position = 'fixed';
-    renderContainer.style.left = '0';
-    renderContainer.style.top = '0';
-    renderContainer.style.width = '8.5in';
-    renderContainer.style.opacity = '0';
-    renderContainer.style.pointerEvents = 'none';
-    renderContainer.style.zIndex = '-1';
-    renderContainer.style.background = '#ffffff';
-    renderContainer.innerHTML = reportHtml;
-    document.body.appendChild(renderContainer);
-
-    // Ensure the browser paints the container before html2canvas snapshots it.
-    await new Promise((resolve) => requestAnimationFrame(() => resolve()));
     if (document.fonts && typeof document.fonts.ready?.then === 'function') {
         await document.fonts.ready;
     }
@@ -1756,20 +1744,25 @@ async function saveFinalReportAsPDF() {
     try {
         await html2pdf()
             .set({
-                margin: [0.45, 0.45, 0.45, 0.45],
+                margin: 0,
                 filename: reportFileName,
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
+                html2canvas: {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    scrollX: 0,
+                    scrollY: 0
+                },
                 jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-                pagebreak: { mode: ['css', 'avoid-all'] }
+                pagebreak: { mode: ['css', 'legacy'] }
             })
-            .from(renderContainer.firstElementChild || renderContainer)
+            .from(reportHtml, 'string')
             .save();
     } catch (error) {
         console.error('PDF export failed:', error);
         alert('Failed to generate PDF. Please try again.');
-    } finally {
-        renderContainer.remove();
     }
 
     if (downloadPdfBtn) {
