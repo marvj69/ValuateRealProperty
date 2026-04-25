@@ -253,6 +253,7 @@ Identify 2 active listings that the subject property will be fighting against fo
         const HISTORY_MAX_ITEMS = 50;
         const JOBS_DB_NAME = 'valuate-jobs';
         const JOBS_STORE_NAME = 'jobs';
+        const DEFAULT_REPORTS_MODEL = 'gemini-3-flash-preview';
         let historyDbPromise = null;
         let historyStorageMode = null;
         let historyCache = [];
@@ -296,6 +297,16 @@ Identify 2 active listings that the subject property will be fighting against fo
 
         function supportsBackgroundProcessing() {
             return 'serviceWorker' in navigator && 'SyncManager' in window;
+        }
+
+        function getSelectedReportsModel() {
+            const modelSelect = document.getElementById('modelSelect');
+            const selectedModel = modelSelect?.value?.trim();
+            if (selectedModel) return selectedModel;
+            if (modelSelect) {
+                modelSelect.value = DEFAULT_REPORTS_MODEL;
+            }
+            return DEFAULT_REPORTS_MODEL;
         }
 
         async function sendJobToServiceWorker(job) {
@@ -755,7 +766,7 @@ Identify 2 active listings that the subject property will be fighting against fo
             e.preventDefault();
             
             const apiKey = document.getElementById('apiKey').value.trim();
-            const model = document.getElementById('modelSelect').value;
+            const model = getSelectedReportsModel();
             const promptKey = document.getElementById('promptSelect')?.value || 'standard';
             const propertyAddress = document.getElementById('propertyAddress').value.trim();
             const propertyFiles = attachmentState.files.length > 0
@@ -931,8 +942,8 @@ Identify 2 active listings that the subject property will be fighting against fo
 
         // Call Gemini API
         function normalizeModelName(model) {
-            if (!model) return '';
-            return model.replace(/^models\//i, '');
+            const selectedModel = model || DEFAULT_REPORTS_MODEL;
+            return selectedModel.replace(/^models\//i, '');
         }
 
         function getThinkingConfigForModel(model) {
@@ -1418,6 +1429,28 @@ ${reportsText}`;
             return reportAddress;
         }
 
+async function loadImageAsDataUrl(assetPath) {
+    const assetUrl = new URL(assetPath, window.location.href);
+
+    try {
+        const response = await fetch(assetUrl.href, { cache: 'force-cache' });
+        if (!response.ok) {
+            throw new Error(`Logo request failed with status ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error || new Error('Logo could not be read.'));
+            reader.readAsDataURL(blob);
+        });
+    } catch (error) {
+        console.warn(`Falling back to direct logo URL for ${assetPath}:`, error);
+        return assetUrl.href;
+    }
+}
+
 async function saveFinalReportAsPDF() {
     if (!finalReportContent.innerHTML.trim()) {
         alert('Generate the final report before saving as PDF.');
@@ -1459,6 +1492,10 @@ async function saveFinalReportAsPDF() {
     const valuationPoint = valuations.pointEstimate
         ? formatCurrency(valuations.pointEstimate)
         : null;
+    const [logo906Src, coldwellLogoSrc] = await Promise.all([
+        loadImageAsDataUrl('photo assets/906-Real-Estate-Group_Logo-2024_Black.png'),
+        loadImageAsDataUrl('photo assets/CBlobo.png')
+    ]);
 
     const disclaimerHtml = `
         <div class="footer-disclaimer">
@@ -1499,12 +1536,15 @@ async function saveFinalReportAsPDF() {
     const reportHtml = `
     <style>
         :root {
-            --primary: #0f172a;       /* Slate 900 */
-            --secondary: #334155;     /* Slate 700 */
-            --accent: #0369a1;        /* Sky 700 */
-            --accent-light: #e0f2fe;  /* Sky 100 */
-            --border: #e2e8f0;        /* Slate 200 */
-            --bg-body: #f8fafc;       /* Slate 50 */
+            --primary: #05070a;
+            --secondary: #344452;
+            --navy: #002068;
+            --navy-deep: #06142f;
+            --lake: #6b8da3;
+            --lake-dark: #55788f;
+            --accent-light: #eaf2f6;
+            --border: #d7e0e7;
+            --bg-body: #f4f7f9;
             --bg-white: #ffffff;
         }
 
@@ -1516,7 +1556,7 @@ async function saveFinalReportAsPDF() {
             padding: 0;
             background-color: var(--bg-body);
             color: var(--primary);
-            font-family: 'Inter', sans-serif; /* Clean sans-serif for UI */
+            font-family: 'Plus Jakarta Sans', 'Inter', Arial, sans-serif;
             font-size: 11pt;
             line-height: 1.5;
             -webkit-print-color-adjust: exact;
@@ -1529,66 +1569,152 @@ async function saveFinalReportAsPDF() {
             max-width: 8.5in;
             margin: 0;
             background: var(--bg-white);
-            padding: 0.5in;
+            padding: 0;
             box-shadow: none;
             border: none;
             overflow: visible;
         }
 
         /* --- Header --- */
-        header {
-            border-bottom: 2px solid var(--border);
-            padding-bottom: 20px;
-            margin-bottom: 30px;
+        .report-header {
+            color: #ffffff;
+            background:
+                linear-gradient(135deg, rgba(0, 32, 104, 0.96), rgba(6, 20, 47, 0.98)),
+                linear-gradient(90deg, var(--navy), var(--primary));
+            padding: 0.42in 0.5in 0.34in;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .report-header::after {
+            content: "";
+            position: absolute;
+            left: 0.5in;
+            right: 0.5in;
+            bottom: 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--lake), #ffffff 48%, var(--lake));
+            opacity: 0.95;
+        }
+
+        .logo-row {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .logo-card {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.97);
+            border: 1px solid rgba(255, 255, 255, 0.72);
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+            padding: 10px 14px;
+            min-height: 76px;
+            border-radius: 8px;
+        }
+
+        .logo-card.dark-logo {
+            background: #050505;
+            border-color: rgba(255, 255, 255, 0.35);
+            padding: 6px 10px;
+        }
+
+        .logo-906 {
+            display: block;
+            width: 154px;
+            max-height: 96px;
+            object-fit: contain;
+        }
+
+        .logo-cb {
+            display: block;
+            width: 168px;
+            max-height: 88px;
+            object-fit: contain;
+        }
+
+        .title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 28px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .brand {
+            max-width: 5.3in;
         }
 
         .brand h1 {
-            font-family: 'Merriweather', serif;
-            font-size: 24pt;
+            font-family: 'Newsreader', Georgia, serif;
+            font-size: 30pt;
             font-weight: 700;
             margin: 0;
-            color: var(--primary);
+            color: #ffffff;
+            line-height: 1.05;
         }
 
         .brand .subtitle {
-            font-size: 10pt;
-            color: var(--secondary);
+            font-size: 8.5pt;
+            color: #d7e6ef;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-top: 4px;
+            letter-spacing: 1.6px;
+            margin-top: 10px;
+            font-weight: 700;
+        }
+
+        .report-meta {
+            text-align: right;
+            color: #d9e6ed;
+            font-size: 8.5pt;
+            line-height: 1.6;
+            min-width: 1.35in;
+            max-width: 2in;
+            overflow-wrap: anywhere;
+        }
+
+        .content-shell {
+            padding: 0.42in 0.5in 0.5in;
         }
 
         /* --- Summary Section --- */
         .summary-section {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 40px;
+            gap: 14px;
+            margin-bottom: 34px;
         }
 
         .summary-item {
-            background: var(--bg-body);
-            padding: 16px;
+            background: linear-gradient(180deg, #ffffff, #f7fafb);
+            padding: 15px 16px;
             border-radius: 8px;
             border: 1px solid var(--border);
+            border-top: 4px solid var(--lake);
             page-break-inside: avoid;
         }
 
         .summary-item.highlight {
             background: var(--accent-light);
-            border-color: #bae6fd;
+            border-color: #b9cbd7;
+            border-top-color: var(--navy);
         }
 
         .summary-item.strong {
-            background: var(--primary);
+            background: linear-gradient(135deg, var(--navy), var(--navy-deep));
             color: white;
-            border-color: var(--primary);
+            border-color: var(--navy);
+            border-top-color: var(--lake);
         }
         
-        .summary-item.strong .summary-label { color: #94a3b8; }
+        .summary-item.strong .summary-label { color: #cfdee6; }
         .summary-item.strong .summary-value { color: white; }
 
         .summary-label {
@@ -1606,36 +1732,48 @@ async function saveFinalReportAsPDF() {
             display: block;
             font-size: 16pt;
             font-weight: 600;
-            font-family: 'Merriweather', serif;
+            font-family: 'Newsreader', Georgia, serif;
+            line-height: 1.2;
+            overflow-wrap: anywhere;
         }
 
-        .text-accent { color: var(--accent); }
+        .text-accent { color: var(--navy); }
         .text-dark { color: var(--primary); }
 
         /* --- Typography & Content --- */
         .report-body {
-            font-family: 'Merriweather', serif; /* Serif for reading */
+            font-family: 'Newsreader', Georgia, serif;
             color: #1e293b;
         }
 
         h2 {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Plus Jakarta Sans', 'Inter', Arial, sans-serif;
             font-size: 14pt;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--primary);
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 8px;
+            letter-spacing: 0.6px;
+            color: var(--navy);
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 9px;
             margin-top: 30px;
             margin-bottom: 15px;
             break-after: avoid; /* Keep header with content */
         }
 
+        h2::before {
+            content: "";
+            display: inline-block;
+            width: 7px;
+            height: 16px;
+            background: var(--lake);
+            margin-right: 10px;
+            vertical-align: -2px;
+        }
+
         h3 {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Plus Jakarta Sans', 'Inter', Arial, sans-serif;
             font-size: 11pt;
             font-weight: 600;
-            color: var(--secondary);
+            color: var(--lake-dark);
             margin-top: 20px;
             margin-bottom: 8px;
         }
@@ -1655,17 +1793,17 @@ async function saveFinalReportAsPDF() {
             width: 100%;
             border-collapse: collapse;
             font-size: 9.5pt;
-            font-family: 'Inter', sans-serif;
+            font-family: 'Plus Jakarta Sans', 'Inter', Arial, sans-serif;
             border: 1px solid var(--border);
         }
 
         th {
-            background-color: var(--bg-body);
-            color: var(--primary);
-            font-weight: 600;
+            background-color: var(--navy);
+            color: #ffffff;
+            font-weight: 700;
             text-align: left;
             padding: 10px 12px;
-            border-bottom: 2px solid var(--border);
+            border-bottom: 2px solid var(--lake);
             font-size: 8.5pt;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -1679,14 +1817,14 @@ async function saveFinalReportAsPDF() {
         }
 
         /* Zebra Striping */
-        tbody tr:nth-child(even) { background-color: #f8fafc; }
-        tbody tr:hover { background-color: #f1f5f9; }
+        tbody tr:nth-child(even) { background-color: #f6f9fb; }
+        tbody tr:hover { background-color: #eef5f8; }
 
         /* --- Footer --- */
         .footer-disclaimer {
             margin-top: 50px;
             padding-top: 20px;
-            border-top: 1px solid var(--border);
+            border-top: 3px solid var(--lake);
             font-size: 8pt;
             color: var(--secondary);
             text-align: justify;
@@ -1704,6 +1842,7 @@ async function saveFinalReportAsPDF() {
                 border: none;
                 box-shadow: none;
             }
+            .content-shell { padding: 0.42in 0.5in 0.5in; }
             
             /* Ensure background colors print */
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -1718,20 +1857,36 @@ async function saveFinalReportAsPDF() {
         }
     </style>
     <div class="page-container">
-        <header>
-            <div class="brand">
-                <h1>Valuation Report</h1>
-                <div class="subtitle">Automated Real Estate Analysis</div>
+        <header class="report-header">
+            <div class="logo-row">
+                <div class="logo-card dark-logo">
+                    <img class="logo-906" src="${logo906Src}" alt="906 Real Estate Group">
+                </div>
+                <div class="logo-card">
+                    <img class="logo-cb" src="${coldwellLogoSrc}" alt="Coldwell Banker Schmidt Realtors">
+                </div>
+            </div>
+            <div class="title-row">
+                <div class="brand">
+                    <h1>Valuation Report</h1>
+                    <div class="subtitle">906 Real Estate Group | Coldwell Banker Schmidt Realtors</div>
+                </div>
+                <div class="report-meta">
+                    <div>Prepared for</div>
+                    <strong>${safeAddress}</strong>
+                </div>
             </div>
         </header>
 
-        ${summaryHtml}
+        <main class="content-shell">
+            ${summaryHtml}
 
-        <div class="report-body">
-            ${printContainer.innerHTML}
-        </div>
+            <div class="report-body">
+                ${printContainer.innerHTML}
+            </div>
 
-        ${disclaimerHtml}
+            ${disclaimerHtml}
+        </main>
     </div>
     `;
 

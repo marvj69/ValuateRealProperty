@@ -1,7 +1,8 @@
-const CACHE_VERSION = 'v2.10';
+const CACHE_VERSION = 'v2.11';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
+const DEFAULT_REPORTS_MODEL = 'gemini-3-flash-preview';
 const JOBS_DB_NAME = 'valuate-jobs';
 const JOBS_STORE_NAME = 'jobs';
 const HISTORY_DB_NAME = 'valuate-history';
@@ -14,7 +15,7 @@ const PRECACHE_URLS = [
   './',
   './index.html',
   './styles.css',
-  './app.js',
+  './app.js?v=2.11',
   './tailwind-config.js',
   './manifest.json',
   './icons/icon-192.png',
@@ -22,6 +23,8 @@ const PRECACHE_URLS = [
   './icons/icon-192-maskable.png',
   './icons/icon-512-maskable.png',
   './icons/icon-180.png',
+  './photo assets/906-Real-Estate-Group_Logo-2024_Black.png',
+  './photo assets/CBlobo.png',
   OFFLINE_URL
 ];
 
@@ -165,8 +168,8 @@ function generateHistoryId() {
 }
 
 function normalizeModelName(model) {
-  if (!model) return '';
-  return model.replace(/^models\//i, '');
+  const selectedModel = model || DEFAULT_REPORTS_MODEL;
+  return selectedModel.replace(/^models\//i, '');
 }
 
 function getThinkingConfigForModel(model) {
@@ -494,7 +497,11 @@ async function showCompletionNotification(job, record) {
 }
 
 async function processJob(job) {
-  if (!job?.payload?.apiKey || !job?.payload?.model) {
+  if (job?.payload && !job.payload.model) {
+    job.payload.model = DEFAULT_REPORTS_MODEL;
+  }
+
+  if (!job?.payload?.apiKey) {
     job.status = 'error';
     job.error = 'Missing API configuration.';
     await saveJob(job);
