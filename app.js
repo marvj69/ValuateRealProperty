@@ -1584,6 +1584,7 @@ async function saveFinalReportAsPDF() {
             padding: 0.42in 0.5in 0.34in;
             position: relative;
             overflow: hidden;
+            isolation: isolate;
         }
 
         .report-header::after {
@@ -1661,6 +1662,7 @@ async function saveFinalReportAsPDF() {
             line-height: 1.05;
         }
 
+
         .brand .subtitle {
             font-size: 8.5pt;
             color: #d7e6ef;
@@ -1668,6 +1670,8 @@ async function saveFinalReportAsPDF() {
             letter-spacing: 1.6px;
             margin-top: 10px;
             font-weight: 700;
+            position: relative;
+            z-index: 2;
         }
 
         .report-meta {
@@ -1829,6 +1833,37 @@ async function saveFinalReportAsPDF() {
             color: var(--secondary);
             text-align: justify;
             break-inside: avoid;
+        }
+
+        /* --- Pagination Controls --- */
+        p, li, blockquote, .summary-item, .table-wrapper, .section, .analysis-section {
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+
+        .report-body * {
+            orphans: 3;
+            widows: 3;
+        }
+
+        .report-body [style*="position: sticky"],
+        .report-body .sticky {
+            position: static !important;
+            top: auto !important;
+        }
+
+        table {
+            page-break-inside: avoid;
+        }
+
+        thead {
+            display: table-header-group;
+        }
+
+        tr,
+        img {
+            break-inside: avoid;
+            page-break-inside: avoid;
         }
 
         /* --- Print Specifics --- */
