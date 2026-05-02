@@ -1463,501 +1463,775 @@ async function saveFinalReportAsPDF() {
         downloadPdfBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>Preparing PDF...';
     }
 
-    const printContainer = document.createElement('div');
-    printContainer.innerHTML = finalReportContent.innerHTML;
-    
-    // CRITICAL: Wrap tables to ensure 'break-inside: avoid' works reliably
-    printContainer.querySelectorAll('table').forEach(table => {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'table-wrapper'; // Changed class name for specificity
-        table.parentNode.insertBefore(wrapper, table);
-        wrapper.appendChild(table);
-    });
-    printContainer.querySelectorAll('a').forEach((link) => {
-        const textNode = document.createTextNode(link.textContent || '');
-        link.replaceWith(textNode);
-    });
+    try {
+        const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+        if (!jsPDFCtor) {
+            alert('PDF generator failed to load. Please refresh and try again.');
+            return;
+        }
 
-    const reportAddress = await resolveReportAddress();
+        const reportAddress = (await resolveReportAddress()).replace(/\s+/g, ' ').trim();
 
-    const addressNode = document.createElement('div');
-    addressNode.textContent = reportAddress;
-    const safeAddress = addressNode.innerHTML;
-    const extractedValuations = extractValuations(printContainer.textContent || '');
-    const valuations = mergeValueRange(extractedValuations, requestState.finalValueRange);
-    
-    const valuationRange = valuations.rangeLow && valuations.rangeHigh
-        ? `${formatCurrency(valuations.rangeLow)} - ${formatCurrency(valuations.rangeHigh)}`
-        : null;
-    const valuationPoint = valuations.pointEstimate
-        ? formatCurrency(valuations.pointEstimate)
-        : null;
-    const [logo906Src, coldwellLogoSrc] = await Promise.all([
-        loadImageAsDataUrl('photo assets/906-Real-Estate-Group_Logo-2024_Black.png'),
-        loadImageAsDataUrl('photo assets/CBlobo.png')
-    ]);
+        const sourceContainer = document.createElement('div');
+        sourceContainer.innerHTML = finalReportContent.innerHTML;
+        sourceContainer.querySelectorAll('a').forEach((link) => {
+            link.replaceWith(document.createTextNode(link.textContent || ''));
+        });
+        sourceContainer.querySelectorAll('script,style').forEach((n) => n.remove());
 
-    const disclaimerHtml = `
-        <div class="footer-disclaimer">
-            <strong>Disclaimer:</strong> This report is an AI-generated estimate based on available data. It is not a professional appraisal. Consult a licensed appraiser for official valuations.
-        </div>
-    `;
+        const valuations = mergeValueRange(
+            extractValuations(sourceContainer.textContent || ''),
+            requestState.finalValueRange
+        );
+        const valuationRange = valuations.rangeLow && valuations.rangeHigh
+            ? `${formatCurrency(valuations.rangeLow)} – ${formatCurrency(valuations.rangeHigh)}`
+            : null;
+        const valuationPoint = valuations.pointEstimate
+            ? formatCurrency(valuations.pointEstimate)
+            : null;
 
-    const summaryHtml = `
-        <div class="summary-section">
-            <div class="summary-item">
-                <span class="summary-label">Subject Property</span>
-                <span class="summary-value">${safeAddress}</span>
-            </div>
-            ${valuationRange ? `
-                <div class="summary-item highlight">
-                    <span class="summary-label">Est. Value Range</span>
-                    <span class="summary-value text-accent">${valuationRange}</span>
-                </div>
-            ` : ''}
-            ${valuationPoint ? `
-                <div class="summary-item strong">
-                    <span class="summary-label">Point Estimate</span>
-                    <span class="summary-value text-dark">${valuationPoint}</span>
-                </div>
-            ` : ''}
-        </div>
-    `;
+        const [logo906Src, coldwellLogoSrc] = await Promise.all([
+            loadImageAsDataUrl('photo assets/906-Real-Estate-Group_Logo-2024_Black.png'),
+            loadImageAsDataUrl('photo assets/CBlobo.png')
+        ]);
 
-    if (typeof html2pdf === 'undefined') {
-        alert('PDF generator failed to load. Please refresh and try again.');
+        const doc = new jsPDFCtor({ unit: 'pt', format: 'letter', orientation: 'portrait', compress: true });
+
+        await renderValuationPdf(doc, {
+            address: reportAddress,
+            valuationRange,
+            valuationPoint,
+            logo906Src,
+            coldwellLogoSrc,
+            content: sourceContainer,
+        });
+
+        const reportFileName = `${reportAddress.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'valuation-report'}.pdf`;
+        doc.save(reportFileName);
+    } catch (error) {
+        console.error('PDF export failed:', error);
+        alert('Failed to generate PDF. Please try again.');
+    } finally {
         if (downloadPdfBtn) {
             downloadPdfBtn.disabled = false;
             downloadPdfBtn.innerHTML = originalDownloadLabel;
         }
-        return;
+    }
+}
+
+async function renderValuationPdf(doc, opts) {
+    const { address, valuationRange, valuationPoint, logo906Src, coldwellLogoSrc, content } = opts;
+
+    const PAGE_W = doc.internal.pageSize.getWidth();
+    const PAGE_H = doc.internal.pageSize.getHeight();
+
+    const C = {
+        navy: [0, 32, 104],
+        navyDeep: [6, 20, 47],
+        lake: [107, 141, 163],
+        lakeDark: [85, 120, 143],
+        primary: [15, 23, 42],
+        body: [30, 41, 59],
+        secondary: [71, 85, 105],
+        muted: [100, 116, 139],
+        border: [215, 224, 231],
+        rowAlt: [246, 249, 251],
+        accentLight: [234, 242, 246],
+        chipText: [207, 222, 230],
+        white: [255, 255, 255],
+        black: [5, 5, 5],
+    };
+
+    const M = { left: 50, right: 50, bottom: 60 };
+    const CONTENT_W = PAGE_W - M.left - M.right;
+    const FULL_HEADER_H = 196;
+    const COMPACT_HEADER_H = 76;
+    const FOOTER_TOP = PAGE_H - M.bottom + 10;
+
+    let y = 0;
+
+    const reportDate = new Date().toLocaleDateString(undefined, {
+        year: 'numeric', month: 'long', day: 'numeric'
+    });
+
+    const setFill = (rgb) => doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+    const setText = (rgb) => doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+    const setDraw = (rgb) => doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+
+    function fitImage(src, x, top, maxW, maxH) {
+        if (!src) return;
+        try {
+            const props = doc.getImageProperties(src);
+            const ratio = props.width / props.height;
+            let w = maxW, h = maxW / ratio;
+            if (h > maxH) { h = maxH; w = maxH * ratio; }
+            const dx = x + (maxW - w) / 2;
+            const dy = top + (maxH - h) / 2;
+            const fmt = (props.fileType || 'PNG').toUpperCase();
+            doc.addImage(src, fmt, dx, dy, w, h, undefined, 'FAST');
+        } catch (e) {
+            console.warn('Image render failed', e);
+        }
     }
 
-    const reportHtml = `
-    <style>
-        :root {
-            --primary: #05070a;
-            --secondary: #344452;
-            --navy: #002068;
-            --navy-deep: #06142f;
-            --lake: #6b8da3;
-            --lake-dark: #55788f;
-            --accent-light: #eaf2f6;
-            --border: #d7e0e7;
-            --bg-body: #f4f7f9;
-            --bg-white: #ffffff;
+    function drawFullHeader() {
+        setFill(C.navy);
+        doc.rect(0, 0, PAGE_W, FULL_HEADER_H, 'F');
+        setFill(C.navyDeep);
+        doc.rect(0, FULL_HEADER_H - 22, PAGE_W, 22, 'F');
+
+        const cardW = 168, cardH = 64;
+        const cardY = 22;
+        setFill(C.black);
+        doc.roundedRect(M.left, cardY, cardW, cardH, 6, 6, 'F');
+        fitImage(logo906Src, M.left + 10, cardY + 6, cardW - 20, cardH - 12);
+
+        const cbX = PAGE_W - M.right - cardW;
+        setFill(C.white);
+        doc.roundedRect(cbX, cardY, cardW, cardH, 6, 6, 'F');
+        fitImage(coldwellLogoSrc, cbX + 10, cardY + 6, cardW - 20, cardH - 12);
+
+        doc.setFont('times', 'bold');
+        doc.setFontSize(30);
+        setText(C.white);
+        doc.text('Valuation Report', M.left, 132);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        setText([215, 230, 239]);
+        doc.text('906 REAL ESTATE GROUP   •   COLDWELL BANKER SCHMIDT REALTORS',
+            M.left, 150, { charSpace: 0.6 });
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        setText([180, 200, 215]);
+        doc.text(`PREPARED • ${reportDate.toUpperCase()}`,
+            PAGE_W - M.right, 124, { align: 'right', charSpace: 0.6 });
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        setText(C.white);
+        const addrLines = doc.splitTextToSize(address, 220);
+        addrLines.slice(0, 2).forEach((line, i) => {
+            doc.text(line, PAGE_W - M.right, 140 + i * 12, { align: 'right' });
+        });
+
+        setFill(C.lake);
+        doc.rect(0, FULL_HEADER_H - 4, PAGE_W, 2.5, 'F');
+    }
+
+    function drawCompactHeader() {
+        setFill(C.navy);
+        doc.rect(0, 0, PAGE_W, COMPACT_HEADER_H, 'F');
+        setFill(C.lake);
+        doc.rect(0, COMPACT_HEADER_H - 3, PAGE_W, 1.5, 'F');
+
+        const miniW = 84, miniH = 44;
+        setFill(C.black);
+        doc.roundedRect(M.left, 16, miniW, miniH, 4, 4, 'F');
+        fitImage(logo906Src, M.left + 6, 20, miniW - 12, miniH - 8);
+
+        doc.setFont('times', 'bold');
+        doc.setFontSize(14);
+        setText(C.white);
+        doc.text('Valuation Report', PAGE_W - M.right, 32, { align: 'right' });
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        setText([200, 218, 230]);
+        const oneLine = doc.splitTextToSize(address, 340)[0] || '';
+        doc.text(oneLine, PAGE_W - M.right, 48, { align: 'right' });
+    }
+
+    function drawFooter(currentPage, totalPages) {
+        setDraw(C.border);
+        doc.setLineWidth(0.5);
+        doc.line(M.left, FOOTER_TOP - 10, PAGE_W - M.right, FOOTER_TOP - 10);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        setText(C.muted);
+        doc.text('906 Real Estate Group  •  Coldwell Banker Schmidt Realtors',
+            M.left, FOOTER_TOP);
+        doc.text(`Page ${currentPage} of ${totalPages}`,
+            PAGE_W - M.right, FOOTER_TOP, { align: 'right' });
+    }
+
+    function startNewPage() {
+        doc.addPage();
+        drawCompactHeader();
+        y = COMPACT_HEADER_H + 28;
+    }
+
+    function ensureSpace(needed) {
+        if (y + needed > PAGE_H - M.bottom) {
+            startNewPage();
+            return true;
         }
+        return false;
+    }
 
-        /* --- Reset & Base --- */
-        * { box-sizing: border-box; }
+    function applyRunFont(run, baseSize) {
+        let style = 'normal';
+        if (run.bold && run.italic) style = 'bolditalic';
+        else if (run.bold) style = 'bold';
+        else if (run.italic) style = 'italic';
+        const family = run.code ? 'courier' : 'helvetica';
+        doc.setFont(family, style);
+        doc.setFontSize(baseSize);
+    }
 
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg-body);
-            color: var(--primary);
-            font-family: 'Plus Jakarta Sans', 'Inter', Arial, sans-serif;
-            font-size: 11pt;
-            line-height: 1.5;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
-
-        /* --- Layout --- */
-        .page-container {
-            width: 8.5in;
-            max-width: 8.5in;
-            margin: 0;
-            background: var(--bg-white);
-            padding: 0;
-            box-shadow: none;
-            border: none;
-            overflow: visible;
-        }
-
-        /* --- Header --- */
-        .report-header {
-            color: #ffffff;
-            background:
-                linear-gradient(135deg, rgba(0, 32, 104, 0.96), rgba(6, 20, 47, 0.98)),
-                linear-gradient(90deg, var(--navy), var(--primary));
-            padding: 0.42in 0.5in 0.34in;
-            position: relative;
-            overflow: hidden;
-            isolation: isolate;
-        }
-
-        .report-header::after {
-            content: "";
-            position: absolute;
-            left: 0.5in;
-            right: 0.5in;
-            bottom: 0;
-            height: 5px;
-            background: linear-gradient(90deg, var(--lake), #ffffff 48%, var(--lake));
-            opacity: 0.95;
-        }
-
-        .logo-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 20px;
-            margin-bottom: 30px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .logo-card {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: rgba(255, 255, 255, 0.97);
-            border: 1px solid rgba(255, 255, 255, 0.72);
-            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
-            padding: 10px 14px;
-            min-height: 76px;
-            border-radius: 8px;
-        }
-
-        .logo-card.dark-logo {
-            background: #050505;
-            border-color: rgba(255, 255, 255, 0.35);
-            padding: 6px 10px;
-        }
-
-        .logo-906 {
-            display: block;
-            width: 154px;
-            max-height: 96px;
-            object-fit: contain;
-        }
-
-        .logo-cb {
-            display: block;
-            width: 168px;
-            max-height: 88px;
-            object-fit: contain;
-        }
-
-        .title-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-end;
-            gap: 28px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .brand {
-            max-width: 5.3in;
-        }
-
-        .brand h1 {
-            font-family: 'Newsreader', Georgia, serif;
-            font-size: 30pt;
-            font-weight: 700;
-            margin: 0;
-            color: #ffffff;
-            line-height: 1.05;
-        }
-
-
-        .brand .subtitle {
-            font-size: 8.5pt;
-            color: #d7e6ef;
-            text-transform: uppercase;
-            letter-spacing: 1.6px;
-            margin-top: 10px;
-            font-weight: 700;
-            position: relative;
-            z-index: 2;
-        }
-
-        .report-meta {
-            text-align: right;
-            color: #d9e6ed;
-            font-size: 8.5pt;
-            line-height: 1.6;
-            min-width: 1.35in;
-            max-width: 2in;
-            overflow-wrap: anywhere;
-        }
-
-        .content-shell {
-            padding: 0.42in 0.5in 0.5in;
-        }
-
-        /* --- Summary Section --- */
-        .summary-section {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 14px;
-            margin-bottom: 34px;
-        }
-
-        .summary-item {
-            background: linear-gradient(180deg, #ffffff, #f7fafb);
-            padding: 15px 16px;
-            border-radius: 8px;
-            border: 1px solid var(--border);
-            border-top: 4px solid var(--lake);
-            page-break-inside: avoid;
-        }
-
-        .summary-item.highlight {
-            background: var(--accent-light);
-            border-color: #b9cbd7;
-            border-top-color: var(--navy);
-        }
-
-        .summary-item.strong {
-            background: linear-gradient(135deg, var(--navy), var(--navy-deep));
-            color: white;
-            border-color: var(--navy);
-            border-top-color: var(--lake);
-        }
-        
-        .summary-item.strong .summary-label { color: #cfdee6; }
-        .summary-item.strong .summary-value { color: white; }
-
-        .summary-label {
-            display: block;
-            font-size: 8pt;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 6px;
-            font-weight: 600;
-        }
-        
-        .summary-item:not(.strong) .summary-label { color: var(--secondary); }
-
-        .summary-value {
-            display: block;
-            font-size: 16pt;
-            font-weight: 600;
-            font-family: 'Newsreader', Georgia, serif;
-            line-height: 1.2;
-            overflow-wrap: anywhere;
-        }
-
-        .text-accent { color: var(--navy); }
-        .text-dark { color: var(--primary); }
-
-        /* --- Typography & Content --- */
-        .report-body {
-            font-family: 'Newsreader', Georgia, serif;
-            color: #1e293b;
-        }
-
-        h2 {
-            font-family: 'Plus Jakarta Sans', 'Inter', Arial, sans-serif;
-            font-size: 14pt;
-            text-transform: uppercase;
-            letter-spacing: 0.6px;
-            color: var(--navy);
-            border-bottom: 2px solid var(--border);
-            padding-bottom: 9px;
-            margin-top: 30px;
-            margin-bottom: 15px;
-            break-after: avoid; /* Keep header with content */
-        }
-
-        h2::before {
-            content: "";
-            display: inline-block;
-            width: 7px;
-            height: 16px;
-            background: var(--lake);
-            margin-right: 10px;
-            vertical-align: -2px;
-        }
-
-        h3 {
-            font-family: 'Plus Jakarta Sans', 'Inter', Arial, sans-serif;
-            font-size: 11pt;
-            font-weight: 600;
-            color: var(--lake-dark);
-            margin-top: 20px;
-            margin-bottom: 8px;
-        }
-
-        p { margin-bottom: 12px; }
-        ul, ol { margin-bottom: 12px; padding-left: 20px; }
-        li { margin-bottom: 4px; }
-
-        /* --- Table Styling --- */
-        .table-wrapper {
-            margin: 24px 0;
-            break-inside: avoid;  /* CRITICAL: Prevents table from splitting across pages */
-            page-break-inside: avoid;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 9.5pt;
-            font-family: 'Plus Jakarta Sans', 'Inter', Arial, sans-serif;
-            border: 1px solid var(--border);
-        }
-
-        th {
-            background-color: var(--navy);
-            color: #ffffff;
-            font-weight: 700;
-            text-align: left;
-            padding: 10px 12px;
-            border-bottom: 2px solid var(--lake);
-            font-size: 8.5pt;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        td {
-            padding: 10px 12px;
-            border-bottom: 1px solid var(--border);
-            vertical-align: top;
-            line-height: 1.4;
-        }
-
-        /* Zebra Striping */
-        tbody tr:nth-child(even) { background-color: #f6f9fb; }
-        tbody tr:hover { background-color: #eef5f8; }
-
-        /* --- Footer --- */
-        .footer-disclaimer {
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 3px solid var(--lake);
-            font-size: 8pt;
-            color: var(--secondary);
-            text-align: justify;
-            break-inside: avoid;
-        }
-
-        /* --- Pagination Controls --- */
-        p, li, blockquote, .summary-item, .table-wrapper, .section, .analysis-section {
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-
-        .report-body * {
-            orphans: 3;
-            widows: 3;
-        }
-
-        .report-body [style*="position: sticky"],
-        .report-body .sticky {
-            position: static !important;
-            top: auto !important;
-        }
-
-        table {
-            page-break-inside: avoid;
-        }
-
-        thead {
-            display: table-header-group;
-        }
-
-        tr,
-        img {
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-
-        /* --- Print Specifics --- */
-        @media print {
-            body { background: white; }
-            .page-container {
-                width: 100%;
-                max-width: none;
-                margin: 0;
-                padding: 0;
-                border: none;
-                box-shadow: none;
+    function collectInlineRuns(element) {
+        const runs = [];
+        function visit(node, ctx) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                if (node.nodeValue) runs.push({ text: node.nodeValue, ...ctx });
+                return;
             }
-            .content-shell { padding: 0.42in 0.5in 0.5in; }
-            
-            /* Ensure background colors print */
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            
-            /* Pagination Safety */
-            h2, h3, .summary-item, .table-wrapper, blockquote {
-                break-inside: avoid;
-                page-break-inside: avoid;
+            if (node.nodeType !== Node.ELEMENT_NODE) return;
+            const tag = node.tagName.toLowerCase();
+            if (tag === 'br') { runs.push({ text: '\n', ...ctx }); return; }
+            const next = { ...ctx };
+            if (tag === 'strong' || tag === 'b') next.bold = true;
+            if (tag === 'em' || tag === 'i') next.italic = true;
+            if (tag === 'code') next.code = true;
+            node.childNodes.forEach((c) => visit(c, next));
+        }
+        element.childNodes.forEach((c) => visit(c, { bold: false, italic: false, code: false }));
+        return runs;
+    }
+
+    function renderRuns(runs, opts) {
+        const { fontSize, lineHeight, color, x, maxWidth, indentFirstLine = 0 } = opts;
+        if (!runs.length) return;
+
+        const tokens = [];
+        runs.forEach((run) => {
+            if (run.text === '\n') { tokens.push({ isBreak: true }); return; }
+            const parts = run.text.split(/(\s+)/);
+            parts.forEach((p) => {
+                if (!p) return;
+                tokens.push({
+                    text: p,
+                    isSpace: /^\s+$/.test(p),
+                    bold: !!run.bold,
+                    italic: !!run.italic,
+                    code: !!run.code,
+                });
+            });
+        });
+
+        const allowedFor = (firstLine) => maxWidth - (firstLine ? indentFirstLine : 0);
+        let lineTokens = [];
+        let lineWidth = 0;
+        let firstLine = true;
+
+        const flushLine = () => {
+            while (lineTokens.length && lineTokens[lineTokens.length - 1].isSpace) {
+                const popped = lineTokens.pop();
+                lineWidth -= popped.width || 0;
+            }
+            ensureSpace(lineHeight);
+            if (lineTokens.length) {
+                let cx = x + (firstLine ? indentFirstLine : 0);
+                setText(color);
+                lineTokens.forEach((t) => {
+                    applyRunFont(t, fontSize);
+                    if (t.code) {
+                        setFill([244, 247, 250]);
+                        doc.rect(cx - 1, y - fontSize + 1, t.width + 2, fontSize + 2, 'F');
+                        setText([15, 23, 42]);
+                    } else {
+                        setText(color);
+                    }
+                    doc.text(t.text, cx, y);
+                    cx += t.width;
+                });
+            }
+            y += lineHeight;
+            firstLine = false;
+            lineTokens = [];
+            lineWidth = 0;
+        };
+
+        for (const t of tokens) {
+            if (t.isBreak) { flushLine(); continue; }
+            applyRunFont(t, fontSize);
+            t.width = doc.getTextWidth(t.text);
+
+            if (!t.isSpace && lineWidth + t.width > allowedFor(firstLine) && lineTokens.length) {
+                flushLine();
+            }
+            if (!lineTokens.length && t.isSpace) continue;
+
+            if (!t.isSpace && t.width > allowedFor(firstLine)) {
+                const chunks = doc.splitTextToSize(t.text, allowedFor(firstLine));
+                chunks.forEach((chunk, idx) => {
+                    if (idx > 0) flushLine();
+                    applyRunFont(t, fontSize);
+                    const w = doc.getTextWidth(chunk);
+                    lineTokens.push({ ...t, text: chunk, width: w, isSpace: false });
+                    lineWidth += w;
+                });
+                continue;
             }
 
-            h2 { break-after: avoid; }
+            lineTokens.push(t);
+            lineWidth += t.width;
         }
-    </style>
-    <div class="page-container">
-        <header class="report-header">
-            <div class="logo-row">
-                <div class="logo-card dark-logo">
-                    <img class="logo-906" src="${logo906Src}" alt="906 Real Estate Group">
-                </div>
-                <div class="logo-card">
-                    <img class="logo-cb" src="${coldwellLogoSrc}" alt="Coldwell Banker Schmidt Realtors">
-                </div>
-            </div>
-            <div class="title-row">
-                <div class="brand">
-                    <h1>Valuation Report</h1>
-                    <div class="subtitle">906 Real Estate Group | Coldwell Banker Schmidt Realtors</div>
-                </div>
-                <div class="report-meta">
-                    <div>Prepared for</div>
-                    <strong>${safeAddress}</strong>
-                </div>
-            </div>
-        </header>
-
-        <main class="content-shell">
-            ${summaryHtml}
-
-            <div class="report-body">
-                ${printContainer.innerHTML}
-            </div>
-
-            ${disclaimerHtml}
-        </main>
-    </div>
-    `;
-
-    if (document.fonts && typeof document.fonts.ready?.then === 'function') {
-        await document.fonts.ready;
+        flushLine();
     }
 
-    const reportFileName = `${reportAddress.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'valuation-report'}.pdf`;
+    function renderHeading2(node) {
+        const text = (node.textContent || '').trim();
+        if (!text) return;
+        const fontSize = 13;
 
-    try {
-        await html2pdf()
-            .set({
-                margin: 0,
-                filename: reportFileName,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: {
-                    scale: 2,
-                    useCORS: true,
-                    backgroundColor: '#ffffff',
-                    logging: false,
-                    scrollX: 0,
-                    scrollY: 0
-                },
-                jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' },
-                pagebreak: { mode: ['css', 'legacy'] }
-            })
-            .from(reportHtml, 'string')
-            .save();
-    } catch (error) {
-        console.error('PDF export failed:', error);
-        alert('Failed to generate PDF. Please try again.');
+        ensureSpace(46);
+        y += 14;
+
+        setFill(C.lake);
+        doc.rect(M.left, y - 11, 4, 14, 'F');
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(fontSize);
+        setText(C.navy);
+        const lines = doc.splitTextToSize(text.toUpperCase(), CONTENT_W - 14);
+        lines.forEach((line, i) => {
+            if (i > 0) ensureSpace(16);
+            doc.text(line, M.left + 12, y + i * 16);
+        });
+        y += lines.length * 16 + 4;
+
+        setDraw(C.border);
+        doc.setLineWidth(0.75);
+        doc.line(M.left, y, PAGE_W - M.right, y);
+        y += 14;
     }
 
-    if (downloadPdfBtn) {
-        downloadPdfBtn.disabled = false;
-        downloadPdfBtn.innerHTML = originalDownloadLabel;
+    function renderHeading3(node) {
+        const text = (node.textContent || '').trim();
+        if (!text) return;
+        ensureSpace(28);
+        y += 8;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        setText(C.lakeDark);
+        const lines = doc.splitTextToSize(text, CONTENT_W);
+        lines.forEach((line, i) => {
+            if (i > 0) ensureSpace(14);
+            doc.text(line, M.left, y + i * 14);
+        });
+        y += lines.length * 14 + 2;
+    }
+
+    function renderHeading4(node) {
+        const text = (node.textContent || '').trim();
+        if (!text) return;
+        ensureSpace(22);
+        y += 6;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9.5);
+        setText(C.secondary);
+        const lines = doc.splitTextToSize(text.toUpperCase(), CONTENT_W);
+        lines.forEach((line, i) => {
+            if (i > 0) ensureSpace(12);
+            doc.text(line, M.left, y + i * 12, { charSpace: 0.4 });
+        });
+        y += lines.length * 12 + 2;
+    }
+
+    function renderParagraph(node) {
+        const runs = collectInlineRuns(node);
+        if (!runs.length || runs.every((r) => !r.text || !r.text.trim())) return;
+        renderRuns(runs, {
+            fontSize: 10.5,
+            lineHeight: 14.5,
+            color: C.body,
+            x: M.left,
+            maxWidth: CONTENT_W,
+        });
+        y += 6;
+    }
+
+    function renderList(node, ordered) {
+        const items = Array.from(node.children).filter((c) => c.tagName === 'LI');
+        if (!items.length) return;
+        const indent = 20;
+        items.forEach((li, idx) => {
+            ensureSpace(15);
+            const bullet = ordered ? `${idx + 1}.` : '•';
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(10.5);
+            setText(C.navy);
+            doc.text(bullet, M.left + 4, y);
+
+            const runs = collectInlineRuns(li);
+            renderRuns(runs, {
+                fontSize: 10.5,
+                lineHeight: 14.5,
+                color: C.body,
+                x: M.left + indent,
+                maxWidth: CONTENT_W - indent,
+            });
+            y += 2;
+        });
+        y += 6;
+    }
+
+    function renderBlockquote(node) {
+        const runs = collectInlineRuns(node);
+        if (!runs.length) return;
+        const indent = 16;
+        const startY = y + 2;
+        renderRuns(runs.map((r) => ({ ...r, italic: true })), {
+            fontSize: 10.5,
+            lineHeight: 14.5,
+            color: C.secondary,
+            x: M.left + indent,
+            maxWidth: CONTENT_W - indent,
+        });
+        const endY = y - 4;
+        if (endY > startY) {
+            setFill(C.lake);
+            doc.rect(M.left, startY - 8, 3, endY - startY + 10, 'F');
+        }
+        y += 6;
+    }
+
+    function renderCodeBlock(node) {
+        const text = node.textContent || '';
+        if (!text.trim()) return;
+        const padX = 10, padY = 8;
+        const lineHeight = 12;
+        doc.setFont('courier', 'normal');
+        doc.setFontSize(9);
+        const lines = doc.splitTextToSize(text.replace(/\t/g, '    '), CONTENT_W - 2 * padX);
+
+        ensureSpace(20);
+        y += 4;
+        let cursor = 0;
+        while (cursor < lines.length) {
+            const remaining = PAGE_H - M.bottom - y - padY;
+            const fit = Math.max(1, Math.floor(remaining / lineHeight));
+            const slice = lines.slice(cursor, cursor + fit);
+            const blockH = slice.length * lineHeight + 2 * padY;
+            setFill([244, 247, 250]);
+            doc.roundedRect(M.left, y, CONTENT_W, blockH, 4, 4, 'F');
+            setDraw(C.border);
+            doc.setLineWidth(0.5);
+            doc.roundedRect(M.left, y, CONTENT_W, blockH, 4, 4, 'S');
+            doc.setFont('courier', 'normal');
+            doc.setFontSize(9);
+            setText(C.primary);
+            slice.forEach((line, i) => {
+                doc.text(line, M.left + padX, y + padY + (i + 1) * lineHeight - 3);
+            });
+            y += blockH;
+            cursor += slice.length;
+            if (cursor < lines.length) startNewPage();
+        }
+        y += 8;
+    }
+
+    function renderHr() {
+        ensureSpace(20);
+        y += 8;
+        setDraw(C.border);
+        doc.setLineWidth(0.75);
+        doc.line(M.left, y, PAGE_W - M.right, y);
+        y += 12;
+    }
+
+    function renderTable(node) {
+        const rawRows = [];
+        const headerCells = Array.from(node.querySelectorAll('thead th'))
+            .map((th) => ({ text: (th.textContent || '').trim(), align: th.getAttribute('align') || 'left' }));
+        let bodyRows = Array.from(node.querySelectorAll('tbody tr'))
+            .map((tr) => Array.from(tr.children).map((td) => ({
+                text: (td.textContent || '').trim(),
+                align: td.getAttribute('align') || 'left',
+            })));
+
+        if (!headerCells.length) {
+            const allTrs = Array.from(node.querySelectorAll('tr'));
+            if (allTrs.length) {
+                const first = allTrs[0];
+                Array.from(first.children).forEach((c) => {
+                    headerCells.push({ text: (c.textContent || '').trim(), align: c.getAttribute('align') || 'left' });
+                });
+                bodyRows = allTrs.slice(1).map((tr) =>
+                    Array.from(tr.children).map((td) => ({
+                        text: (td.textContent || '').trim(),
+                        align: td.getAttribute('align') || 'left',
+                    }))
+                );
+            }
+        }
+
+        const colCount = headerCells.length || (bodyRows[0]?.length || 0);
+        if (!colCount) return;
+        if (!headerCells.length) {
+            for (let i = 0; i < colCount; i++) headerCells.push({ text: '', align: 'left' });
+        }
+
+        const padX = 8, padY = 6;
+        const headerFontSize = 8;
+        const bodyFontSize = 9;
+        const lineHeight = 11.5;
+
+        // Compute column widths weighted by max content length, clamped
+        const widths = new Array(colCount).fill(0);
+        const allRows = [headerCells, ...bodyRows];
+        allRows.forEach((row) => {
+            row.forEach((cell, ci) => {
+                if (ci >= colCount) return;
+                const sample = (cell.text || '').slice(0, 80);
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(bodyFontSize);
+                widths[ci] = Math.max(widths[ci], doc.getTextWidth(sample));
+            });
+        });
+        const widthSum = widths.reduce((a, b) => a + b, 0) || 1;
+        let colW = widths.map((w) => Math.max(40, (w / widthSum) * CONTENT_W));
+        const colSum = colW.reduce((a, b) => a + b, 0);
+        colW = colW.map((w) => (w / colSum) * CONTENT_W);
+
+        const cellLines = (cell, w) => doc.splitTextToSize(cell.text || '', w - 2 * padX);
+
+        function drawHeaderRow() {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(headerFontSize);
+            const linesPerCell = headerCells.map((c, i) => cellLines(c, colW[i]));
+            const headerH = Math.max(1, ...linesPerCell.map((l) => l.length)) * lineHeight + 2 * padY;
+            ensureSpace(headerH + 2);
+            setFill(C.navy);
+            doc.rect(M.left, y, CONTENT_W, headerH, 'F');
+            setFill(C.lake);
+            doc.rect(M.left, y + headerH - 1.5, CONTENT_W, 1.5, 'F');
+            setText(C.white);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(headerFontSize);
+            let cx = M.left;
+            headerCells.forEach((cell, i) => {
+                const lines = linesPerCell[i];
+                lines.forEach((line, li) => {
+                    const xPos = cell.align === 'right'
+                        ? cx + colW[i] - padX
+                        : cell.align === 'center'
+                            ? cx + colW[i] / 2
+                            : cx + padX;
+                    doc.text(line.toUpperCase(), xPos, y + padY + (li + 1) * lineHeight - 3,
+                        { align: cell.align === 'right' ? 'right' : cell.align === 'center' ? 'center' : 'left', charSpace: 0.4 });
+                });
+                cx += colW[i];
+            });
+            y += headerH;
+        }
+
+        ensureSpace(50);
+        y += 10;
+        drawHeaderRow();
+
+        bodyRows.forEach((row, rowIdx) => {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(bodyFontSize);
+            const linesPerCell = row.map((cell, i) => cellLines(cell, colW[i] || CONTENT_W / colCount));
+            const rowH = Math.max(1, ...linesPerCell.map((l) => l.length)) * lineHeight + 2 * padY;
+
+            if (y + rowH > PAGE_H - M.bottom) {
+                startNewPage();
+                drawHeaderRow();
+            }
+
+            if (rowIdx % 2 === 1) {
+                setFill(C.rowAlt);
+                doc.rect(M.left, y, CONTENT_W, rowH, 'F');
+            }
+            setDraw(C.border);
+            doc.setLineWidth(0.4);
+            doc.line(M.left, y + rowH, PAGE_W - M.right, y + rowH);
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(bodyFontSize);
+            setText(C.primary);
+
+            let cx = M.left;
+            row.forEach((cell, i) => {
+                const w = colW[i] || CONTENT_W / colCount;
+                const lines = linesPerCell[i] || [];
+                lines.forEach((line, li) => {
+                    const xPos = cell.align === 'right'
+                        ? cx + w - padX
+                        : cell.align === 'center'
+                            ? cx + w / 2
+                            : cx + padX;
+                    doc.text(line, xPos, y + padY + (li + 1) * lineHeight - 3,
+                        { align: cell.align === 'right' ? 'right' : cell.align === 'center' ? 'center' : 'left' });
+                });
+                cx += w;
+            });
+            y += rowH;
+        });
+
+        y += 14;
+    }
+
+    function renderBlock(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const text = (node.nodeValue || '').trim();
+            if (!text) return;
+            const span = document.createElement('span');
+            span.textContent = text;
+            renderParagraph(span);
+            return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const tag = node.tagName.toLowerCase();
+        switch (tag) {
+            case 'h1':
+            case 'h2':
+                renderHeading2(node); break;
+            case 'h3':
+                renderHeading3(node); break;
+            case 'h4':
+            case 'h5':
+            case 'h6':
+                renderHeading4(node); break;
+            case 'p':
+                renderParagraph(node); break;
+            case 'ul':
+                renderList(node, false); break;
+            case 'ol':
+                renderList(node, true); break;
+            case 'table':
+                renderTable(node); break;
+            case 'blockquote':
+                renderBlockquote(node); break;
+            case 'pre':
+                renderCodeBlock(node); break;
+            case 'hr':
+                renderHr(); break;
+            case 'div':
+            case 'section':
+            case 'article':
+            case 'main':
+                Array.from(node.childNodes).forEach(renderBlock); break;
+            case 'br':
+                ensureSpace(8); y += 8; break;
+            default:
+                if (node.children && node.children.length) {
+                    Array.from(node.childNodes).forEach(renderBlock);
+                } else {
+                    renderParagraph(node);
+                }
+        }
+    }
+
+    function drawSummaryCards() {
+        const items = [{ label: 'Subject Property', value: address, type: 'normal' }];
+        if (valuationRange) items.push({ label: 'Estimated Value Range', value: valuationRange, type: 'highlight' });
+        if (valuationPoint) items.push({ label: 'Point Estimate', value: valuationPoint, type: 'strong' });
+
+        const gap = 10;
+        const n = items.length;
+        const cardW = (CONTENT_W - gap * (n - 1)) / n;
+        const cardH = 80;
+
+        items.forEach((item, i) => {
+            const x = M.left + i * (cardW + gap);
+
+            if (item.type === 'strong') {
+                setFill(C.navy);
+                doc.roundedRect(x, y, cardW, cardH, 6, 6, 'F');
+                setFill(C.lake);
+                doc.rect(x, y, cardW, 4, 'F');
+            } else if (item.type === 'highlight') {
+                setFill(C.accentLight);
+                doc.roundedRect(x, y, cardW, cardH, 6, 6, 'F');
+                setFill(C.navy);
+                doc.rect(x, y, cardW, 4, 'F');
+            } else {
+                setFill(C.white);
+                doc.roundedRect(x, y, cardW, cardH, 6, 6, 'F');
+                setDraw(C.border);
+                doc.setLineWidth(0.6);
+                doc.roundedRect(x, y, cardW, cardH, 6, 6, 'S');
+                setFill(C.lake);
+                doc.rect(x, y, cardW, 4, 'F');
+            }
+
+            const labelColor = item.type === 'strong' ? C.chipText
+                : item.type === 'highlight' ? C.secondary
+                : C.secondary;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7);
+            setText(labelColor);
+            doc.text(item.label.toUpperCase(), x + 12, y + 24, { charSpace: 0.6 });
+
+            const valueColor = item.type === 'strong' ? C.white
+                : item.type === 'highlight' ? C.navy
+                : C.primary;
+            setText(valueColor);
+
+            if (item.type === 'normal') {
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(10.5);
+                const lines = doc.splitTextToSize(item.value, cardW - 24);
+                lines.slice(0, 3).forEach((line, li) => {
+                    doc.text(line, x + 12, y + 42 + li * 13);
+                });
+            } else {
+                doc.setFont('times', 'bold');
+                doc.setFontSize(item.value.length > 18 ? 13 : 16);
+                const lines = doc.splitTextToSize(item.value, cardW - 24);
+                lines.slice(0, 2).forEach((line, li) => {
+                    doc.text(line, x + 12, y + 48 + li * 17);
+                });
+            }
+        });
+
+        y += cardH + 22;
+    }
+
+    function drawDisclaimer() {
+        const disclaimerText = 'This report is an AI-generated estimate based on available data. It is not a professional appraisal. Consult a licensed appraiser for official valuations.';
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        const lines = doc.splitTextToSize(disclaimerText, CONTENT_W);
+        const blockH = 30 + lines.length * 10;
+        ensureSpace(blockH + 14);
+        y += 18;
+        setDraw(C.lake);
+        doc.setLineWidth(2);
+        doc.line(M.left, y, PAGE_W - M.right, y);
+        y += 14;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        setText(C.secondary);
+        doc.text('DISCLAIMER', M.left, y, { charSpace: 0.6 });
+        y += 11;
+        doc.setFont('helvetica', 'normal');
+        setText(C.muted);
+        lines.forEach((line) => { doc.text(line, M.left, y); y += 10; });
+    }
+
+    // ---- Build ----
+    drawFullHeader();
+    y = FULL_HEADER_H + 26;
+
+    drawSummaryCards();
+
+    Array.from(content.childNodes).forEach(renderBlock);
+
+    drawDisclaimer();
+
+    // Footers with page numbers
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        drawFooter(i, totalPages);
     }
 }
 
