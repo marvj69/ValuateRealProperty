@@ -1451,6 +1451,36 @@ async function loadImageAsDataUrl(assetPath) {
     }
 }
 
+async function ensureJsPdfCtor() {
+    const existingCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+    if (existingCtor) return existingCtor;
+
+    const scriptId = 'jspdf-fallback-cdn';
+    if (!document.getElementById(scriptId)) {
+        const script = document.createElement('script');
+        script.id = scriptId;
+        script.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+        script.async = true;
+        document.head.appendChild(script);
+    }
+
+    await new Promise((resolve, reject) => {
+        const script = document.getElementById(scriptId);
+        if (!script) {
+            reject(new Error('Failed to initialize jsPDF fallback loader.'));
+            return;
+        }
+        if ((window.jspdf && window.jspdf.jsPDF) || window.jsPDF) {
+            resolve();
+            return;
+        }
+        script.addEventListener('load', resolve, { once: true });
+        script.addEventListener('error', () => reject(new Error('Failed to load jsPDF fallback script.')), { once: true });
+    });
+
+    return (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+}
+
 async function saveFinalReportAsPDF() {
     if (!finalReportContent.innerHTML.trim()) {
         alert('Generate the final report before saving as PDF.');
@@ -1464,7 +1494,7 @@ async function saveFinalReportAsPDF() {
     }
 
     try {
-        const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+        const jsPDFCtor = await ensureJsPdfCtor();
         if (!jsPDFCtor) {
             alert('PDF generator failed to load. Please refresh and try again.');
             return;
