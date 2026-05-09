@@ -140,7 +140,7 @@
                     <div>
                         <p class="settings-eyebrow">Configuration</p>
                         <h2 id="settingsTitle">Account & Settings</h2>
-                        <p class="settings-subtitle">Sign in and choose report preferences.</p>
+                        <p class="settings-subtitle">Manage your account and report preferences.</p>
                     </div>
                     <button id="settingsClose" type="button" class="settings-close" aria-label="Close settings">
                         <i class="fas fa-xmark"></i>
@@ -151,7 +151,7 @@
                     <!-- Account -->
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-slate-700 mb-2">Account</label>
-                        <p id="authStatusText" class="text-sm text-slate-500 mb-3">Sign in to create reports and access saved reports across devices.</p>
+                        <p id="authStatusText" class="text-sm text-slate-500 mb-3">Sign in or create an account to save reports across devices.</p>
                         <div class="grid gap-3 md:grid-cols-2">
                             <div class="input-group !mb-0">
                                 <i class="fas fa-envelope input-icon"></i>
@@ -159,12 +159,15 @@
                             </div>
                             <div class="input-group !mb-0">
                                 <i class="fas fa-lock input-icon"></i>
-                                <input type="password" id="authAccessCode" class="custom-input" placeholder="Access code" autocomplete="current-password">
+                                <input type="password" id="authPassword" class="custom-input" placeholder="Password" autocomplete="current-password" minlength="8">
                             </div>
                         </div>
                         <div class="flex items-center gap-2 mt-3">
                             <button id="authLoginBtn" type="button" class="history-action">
                                 <i class="fas fa-right-to-bracket"></i> Sign in
+                            </button>
+                            <button id="authSignupBtn" type="button" class="history-action">
+                                <i class="fas fa-user-plus"></i> Create account
                             </button>
                             <button id="authLogoutBtn" type="button" class="history-action danger hidden">
                                 <i class="fas fa-right-from-bracket"></i> Sign out
@@ -310,6 +313,6 @@
         </aside>
     </div>
 
-    <script src="app.js?v=3.0"></script>
+    <script src="app.js?v=3.1"></script>
 </body>
 </html>

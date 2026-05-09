@@ -40,8 +40,9 @@
     const settingsClose = document.getElementById('settingsClose');
     const authStatusBtn = document.getElementById('authStatusBtn');
     const authEmail = document.getElementById('authEmail');
-    const authAccessCode = document.getElementById('authAccessCode');
+    const authPassword = document.getElementById('authPassword');
     const authLoginBtn = document.getElementById('authLoginBtn');
+    const authSignupBtn = document.getElementById('authSignupBtn');
     const authLogoutBtn = document.getElementById('authLogoutBtn');
     const authStatusText = document.getElementById('authStatusText');
 
@@ -221,12 +222,15 @@
         if (authStatusText) {
             authStatusText.textContent = signedIn
                 ? `Signed in as ${appState.user.email}. Reports are saved to your account.`
-                : 'Sign in to create reports and access saved reports across devices.';
+                : 'Sign in or create an account to save reports across devices.';
             authStatusText.classList.toggle('text-emerald-700', signedIn);
             authStatusText.classList.toggle('text-slate-500', !signedIn);
         }
         if (authLoginBtn) {
             authLoginBtn.classList.toggle('hidden', signedIn);
+        }
+        if (authSignupBtn) {
+            authSignupBtn.classList.toggle('hidden', signedIn);
         }
         if (authLogoutBtn) {
             authLogoutBtn.classList.toggle('hidden', !signedIn);
@@ -248,35 +252,76 @@
         return appState.user;
     }
 
-    async function login() {
+    function getAuthCredentials(actionLabel) {
         const email = authEmail?.value?.trim();
-        const accessCode = authAccessCode?.value || '';
-        if (!email || !accessCode) {
-            alert('Enter your email and access code to sign in.');
-            return;
+        const password = authPassword?.value || '';
+        if (!email || !password) {
+            alert(`Enter your email and password to ${actionLabel}.`);
+            return null;
         }
+        return { email, password };
+    }
 
+    function setAuthBusy(isBusy, action = 'login') {
         if (authLoginBtn) {
-            authLoginBtn.disabled = true;
-            authLoginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in';
+            authLoginBtn.disabled = isBusy;
+            authLoginBtn.innerHTML = isBusy && action === 'login'
+                ? '<i class="fas fa-spinner fa-spin"></i> Signing in'
+                : '<i class="fas fa-right-to-bracket"></i> Sign in';
         }
+        if (authSignupBtn) {
+            authSignupBtn.disabled = isBusy;
+            authSignupBtn.innerHTML = isBusy && action === 'signup'
+                ? '<i class="fas fa-spinner fa-spin"></i> Creating'
+                : '<i class="fas fa-user-plus"></i> Create account';
+        }
+    }
+
+    async function login() {
+        const credentials = getAuthCredentials('sign in');
+        if (!credentials) return;
+
+        setAuthBusy(true, 'login');
 
         try {
             const data = await apiRequest('/api/auth/login', {
                 method: 'POST',
-                body: { email, accessCode }
+                body: credentials
             });
             appState.user = data.user || null;
-            if (authAccessCode) authAccessCode.value = '';
+            if (authPassword) authPassword.value = '';
             updateAuthUi();
             await refreshHistoryList();
         } catch (error) {
             alert(error.message || 'Sign in failed.');
         } finally {
-            if (authLoginBtn) {
-                authLoginBtn.disabled = false;
-                authLoginBtn.innerHTML = '<i class="fas fa-right-to-bracket"></i> Sign in';
-            }
+            setAuthBusy(false);
+        }
+    }
+
+    async function signup() {
+        const credentials = getAuthCredentials('create an account');
+        if (!credentials) return;
+        if (credentials.password.length < 8) {
+            alert('Use a password that is at least 8 characters.');
+            return;
+        }
+
+        setAuthBusy(true, 'signup');
+
+        try {
+            const data = await apiRequest('/api/auth/signup', {
+                method: 'POST',
+                body: credentials
+            });
+            appState.user = data.user || null;
+            if (authPassword) authPassword.value = '';
+            updateAuthUi();
+            await refreshHistoryList();
+        } catch (error) {
+            alert(error.message || 'Account creation failed.');
+        } finally {
+            setAuthBusy(false);
         }
     }
 
@@ -1206,8 +1251,9 @@
         settingsOverlay?.addEventListener('click', closeSettingsModal);
         settingsClose?.addEventListener('click', closeSettingsModal);
         authLoginBtn?.addEventListener('click', login);
+        authSignupBtn?.addEventListener('click', signup);
         authLogoutBtn?.addEventListener('click', logout);
-        authAccessCode?.addEventListener('keydown', (event) => {
+        authPassword?.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') login();
         });
 

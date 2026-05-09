@@ -14,6 +14,21 @@ export async function ensureSchema() {
 
 async function createSchema() {
   await sql`
+    CREATE TABLE IF NOT EXISTS app_users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS app_users_email_idx
+    ON app_users (email)
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS report_jobs (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,

@@ -38,7 +38,8 @@ Choose between two analysis approaches:
 - A modern web browser (Chrome, Firefox, Safari, Edge)
 - A Google Gemini API key configured as a server environment variable
 - Vercel Postgres / Neon connection environment variables
-- An `AUTH_ACCESS_CODE` and `AUTH_SESSION_SECRET` for the built-in signed-cookie auth flow
+- An `AUTH_SESSION_SECRET` for the built-in signed-cookie auth flow
+- Users create email/password accounts that are stored in Postgres
 
 ### Installation
 
@@ -57,7 +58,7 @@ Choose between two analysis approaches:
    ```bash
    cp .env.example .env
    ```
-   Fill in `GEMINI_API_KEY`, `AUTH_ACCESS_CODE`, `AUTH_SESSION_SECRET`, `CRON_SECRET`, and your Vercel Postgres / Neon connection values.
+   Fill in `GEMINI_API_KEY`, `AUTH_SESSION_SECRET`, `CRON_SECRET`, and your Vercel Postgres / Neon connection values.
 
 4. **Run with Vercel-compatible API routes**
    ```bash
@@ -70,9 +71,9 @@ Choose between two analysis approaches:
 ### First-Time Setup
 
 1. Click **Sign in** or the settings icon in the top navigation
-2. Enter your email and the configured access code
+2. Enter your email and password, then choose **Create account**
 3. Select your preferred AI model and report settings
-4. Configure other settings as needed
+4. Return later with **Sign in** using the same email and password
 
 ## How to Use
 
@@ -114,12 +115,13 @@ Choose between two analysis approaches:
 - **Backend**: Vercel API Functions under `api/`
 - **Async Processing**: `POST /api/reports` creates a queued job, returns a report ID, and starts backend processing with `waitUntil`; `/api/worker` can process queued/stale jobs on a cron schedule
 - **AI Integration**: Google Gemini API (v1beta) with web grounding, called only from backend functions
-- **Storage**: Centralized Postgres table `report_jobs`, scoped by authenticated `user_id`
+- **Storage**: Postgres tables `app_users` and `report_jobs`, with reports scoped by authenticated `user_id`
 - **Service Worker**: Static/offline asset caching only
 - **PWA**: Installable Progressive Web App with manifest
 
 ### API Routes
-- `POST /api/auth/login` - create a signed HttpOnly session cookie
+- `POST /api/auth/signup` - create an email/password account and signed HttpOnly session cookie
+- `POST /api/auth/login` - verify an email/password account and create a signed HttpOnly session cookie
 - `POST /api/auth/logout` - clear the session
 - `GET /api/auth/me` - inspect current auth state
 - `POST /api/reports` - create a report job
@@ -131,7 +133,6 @@ Choose between two analysis approaches:
 
 ### Required Environment Variables
 - `GEMINI_API_KEY`: server-side Gemini key
-- `AUTH_ACCESS_CODE`: shared access code accepted by the built-in login route
 - `AUTH_SESSION_SECRET`: long random string used to sign sessions
 - `CRON_SECRET`: bearer token for the scheduled worker endpoint
 - `REPORT_MODEL`: optional default Gemini model
