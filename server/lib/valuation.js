@@ -1,10 +1,15 @@
 import {
   buildAddressExtractionPrompt,
+  buildComplianceReviewPrompt,
+  buildComplianceRevisionPrompt,
   buildFinalReportPrompt,
   buildValidationPrompt,
   buildValueExtractionPrompt
 } from './prompts.js';
 import { callGemini } from './gemini.js';
+
+const COMPLIANCE_REVIEW_MODEL = 'gemini-flash-lite-latest';
+const MAX_COMPLIANCE_REVISION_ROUNDS = 2;
 
 function parseNumber(value) {
   if (value === null || value === undefined) return null;
@@ -137,13 +142,186 @@ export async function inferAddressFromFinalReport({ reportText, model }) {
   return candidate;
 }
 
-export async function generateMergedReport({ successfulReports, reportAudience, model, enableSearch }) {
+function parseJsonObject(responseText) {
+  const cleaned = String(responseText || '')
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (error) {
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    try {
+      return JSON.parse(jsonMatch[0]);
+    } catch (innerError) {
+      return null;
+    }
+  }
+}
+
+function normalizeComplianceFinding(finding = {}) {
+  const passage = String(finding.passage || finding.section || finding.quote || '').trim();
+  const riskCategory = String(finding.riskCategory || finding.risk_category || finding.category || 'Other').trim();
+  const explanation = String(finding.explanation || finding.issue || finding.reason || '').trim();
+
+  return {
+    passage: passage.slice(0, 2000),
+    riskCategory: riskCategory.slice(0, 200) || 'Other',
+    explanation: explanation.slice(0, 1000)
+  };
+}
+
+export function parseComplianceReviewResponse(responseText) {
+  const parsed = parseJsonObject(responseText);
+  if (!parsed) {
+    throw new Error('Compliance reviewer returned an unparseable response.');
+  }
+
+  const status = String(parsed.status || '').trim().toUpperCase();
+  if (status === 'PASS') {
+    return { status: 'PASS', findings: [] };
+  }
+
+  if (status !== 'NEEDS_REVISION') {
+    throw new Error('Compliance reviewer returned an invalid status.');
+  }
+
+  const findings = Array.isArray(parsed.findings)
+    ? parsed.findings.map(normalizeComplianceFinding).filter((finding) => (
+        finding.passage && finding.riskCategory && finding.explanation
+      ))
+    : [];
+
+  if (findings.length === 0) {
+    throw new Error('Compliance reviewer requested revisions without structured findings.');
+  }
+
+  return { status: 'NEEDS_REVISION', findings };
+}
+
+function summarizeComplianceAttempt(review) {
+  const riskCategories = [...new Set((review.findings || []).map((finding) => finding.riskCategory))];
+  return {
+    status: review.status,
+    findingCount: review.findings?.length || 0,
+    riskCategories
+  };
+}
+
+function buildComplianceFailureMessage(findings = []) {
+  const riskCategories = [...new Set(findings.map((finding) => finding.riskCategory).filter(Boolean))];
+  const categoryText = riskCategories.length ? ` (${riskCategories.join(', ')})` : '';
+  return `Final ethics and compliance review found unresolved concerns${categoryText}. The report was not delivered.`;
+}
+
+function cleanMarkdownResponse(responseText) {
+  const cleaned = String(responseText || '').trim();
+  const fencedMatch = cleaned.match(/^```(?:markdown|md)?\s*([\s\S]*?)\s*```$/i);
+  return (fencedMatch?.[1] || cleaned).trim();
+}
+
+async function notifyProgressPhase(onProgressPhase, phase) {
+  if (typeof onProgressPhase !== 'function') return;
+  try {
+    await onProgressPhase(phase);
+  } catch (error) {
+    // Progress updates are helpful, but they should not block report completion.
+  }
+}
+
+export async function reviewFinalReportCompliance({ reportText, reportAudience }) {
+  const result = await callGemini({
+    model: COMPLIANCE_REVIEW_MODEL,
+    prompt: buildComplianceReviewPrompt({ reportText, reportAudience }),
+    enableSearch: false,
+    index: 0,
+    attachments: [],
+    maxOutputTokens: 8192
+  });
+
+  return {
+    ...parseComplianceReviewResponse(result.content),
+    model: COMPLIANCE_REVIEW_MODEL,
+    reviewedAt: new Date().toISOString()
+  };
+}
+
+async function reviseFinalReportForCompliance({ reportText, findings, reportAudience }) {
+  const result = await callGemini({
+    model: COMPLIANCE_REVIEW_MODEL,
+    prompt: buildComplianceRevisionPrompt({ reportText, findings, reportAudience }),
+    enableSearch: false,
+    index: 0,
+    attachments: [],
+    maxOutputTokens: 65536
+  });
+
+  const revisedReport = cleanMarkdownResponse(result.content);
+  if (!revisedReport) {
+    throw new Error('Compliance revision returned an empty report.');
+  }
+  return revisedReport;
+}
+
+export async function runFinalComplianceReview({ reportText, reportAudience, onProgressPhase }) {
+  let currentReportText = String(reportText || '').trim();
+  if (!currentReportText) {
+    throw new Error('Final ethics and compliance review cannot run on an empty report.');
+  }
+
+  const attempts = [];
+  for (let round = 0; round <= MAX_COMPLIANCE_REVISION_ROUNDS; round += 1) {
+    await notifyProgressPhase(onProgressPhase, round === 0 ? 'compliance_review' : 'compliance_rereview');
+    const review = await reviewFinalReportCompliance({
+      reportText: currentReportText,
+      reportAudience
+    });
+    attempts.push(review);
+
+    if (review.status === 'PASS') {
+      return {
+        content: currentReportText,
+        status: 'PASS',
+        model: COMPLIANCE_REVIEW_MODEL,
+        reviewedAt: review.reviewedAt,
+        revisionRounds: round,
+        attempts: attempts.map(summarizeComplianceAttempt)
+      };
+    }
+
+    if (round === MAX_COMPLIANCE_REVISION_ROUNDS) {
+      const error = new Error(buildComplianceFailureMessage(review.findings));
+      error.complianceReview = {
+        status: 'NEEDS_REVISION',
+        model: COMPLIANCE_REVIEW_MODEL,
+        findings: review.findings,
+        attempts: attempts.map(summarizeComplianceAttempt)
+      };
+      throw error;
+    }
+
+    await notifyProgressPhase(onProgressPhase, 'compliance_revision');
+    currentReportText = await reviseFinalReportForCompliance({
+      reportText: currentReportText,
+      findings: review.findings,
+      reportAudience
+    });
+  }
+
+  throw new Error('Final ethics and compliance review did not complete.');
+}
+
+export async function generateMergedReport({ successfulReports, reportAudience, model, enableSearch, onProgressPhase }) {
   const reportsText = successfulReports
     .map((report, index) => `--- Report ${index + 1} ---\n${report.content}`)
     .join('\n\n');
 
   let validatedCompsContent = 'Validation step unavailable.';
   try {
+    await notifyProgressPhase(onProgressPhase, 'validating');
     validatedCompsContent = await validateCompsAndListings({
       reportsText,
       model,
@@ -153,6 +331,7 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
     validatedCompsContent = `Validation step failed: ${error.message}. Proceed with caution and note that comps were not independently verified.`;
   }
 
+  await notifyProgressPhase(onProgressPhase, 'merging');
   const result = await callGemini({
     model,
     prompt: buildFinalReportPrompt({
@@ -166,11 +345,18 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
     extraTools: [{ code_execution: {} }]
   });
 
-  const extracted = extractValuations(result.content);
+  const complianceReview = await runFinalComplianceReview({
+    reportText: result.content,
+    reportAudience,
+    onProgressPhase
+  });
+  const finalContent = complianceReview.content;
+
+  const extracted = extractValuations(finalContent);
   let inferredRange = null;
   try {
     inferredRange = await inferValueRangeFromReport({
-      reportText: result.content,
+      reportText: finalContent,
       model
     });
   } catch (error) {
@@ -180,7 +366,7 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
   let inferredAddress = null;
   try {
     inferredAddress = await inferAddressFromFinalReport({
-      reportText: result.content,
+      reportText: finalContent,
       model
     });
   } catch (error) {
@@ -188,11 +374,18 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
   }
 
   return {
-    content: result.content,
+    content: finalContent,
     valueRange: inferredRange,
     valuations: mergeValueRange(extracted, inferredRange),
     inferredAddress,
     validatedCompsContent,
+    complianceReview: {
+      status: complianceReview.status,
+      model: complianceReview.model,
+      reviewedAt: complianceReview.reviewedAt,
+      revisionRounds: complianceReview.revisionRounds,
+      attempts: complianceReview.attempts
+    },
     generatedAt: new Date().toISOString()
   };
 }

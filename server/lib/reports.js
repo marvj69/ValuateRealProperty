@@ -358,6 +358,7 @@ async function markReportFailed(id, message, reports = [], reportCount = DEFAULT
     SET
       status = 'failed',
       reports = ${jsonParam(reports)}::jsonb,
+      final_report = NULL,
       progress = ${jsonParam(progress)}::jsonb,
       error = ${String(message || 'Report processing failed.')},
       updated_at = now(),
@@ -441,7 +442,12 @@ async function processClaimedReport(row) {
       successfulReports,
       reportAudience: payload.reportAudience,
       model: payload.model,
-      enableSearch: payload.enableSearch
+      enableSearch: payload.enableSearch,
+      onProgressPhase: (phase) => updateReportProgress(row.id, reports, {
+        total: reportCount,
+        completed,
+        phase
+      })
     });
 
     finalReport.model = payload.model;

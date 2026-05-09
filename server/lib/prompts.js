@@ -212,6 +212,73 @@ Internal Research Materials:
 ${reportsText}`;
 }
 
+export function buildComplianceReviewPrompt({ reportText, reportAudience }) {
+  return `You are a lightweight ethics and professional-compliance reviewer for a client-facing real estate valuation report.
+Intended audience: ${reportAudience || 'seller'}.
+
+Your job is to quickly scan the complete report before it is delivered to the seller/client.
+
+Review for material ethical or professional concerns, including:
+- Fair Housing violations or discriminatory language.
+- Steering language or neighborhood characterizations that could imply protected-class bias.
+- Unsupported valuation claims or misleading certainty.
+- Statements that overstep into appraisal, legal, tax, or financial advice.
+- Missing or weak disclaimers about data limitations, lack of physical inspection, or lack of formal appraisal status.
+- Confidential, private, or inappropriate client information.
+- Misrepresentation of MLS data, market data, comparable sales, assumptions, or source confidence.
+- Any language that could create a misleading impression for the seller/client.
+
+Return ONLY a JSON object. Do not include Markdown fences.
+Use exactly one of these statuses:
+- "PASS" when no material ethical or compliance concerns are found.
+- "NEEDS_REVISION" when concerns are found.
+
+If status is "PASS", use this exact shape:
+{
+  "status": "PASS",
+  "findings": []
+}
+
+If status is "NEEDS_REVISION", use this exact shape:
+{
+  "status": "NEEDS_REVISION",
+  "findings": [
+    {
+      "passage": "Exact passage or section that triggered the concern",
+      "riskCategory": "Fair Housing | Steering | Unsupported Valuation Claim | Appraisal/Legal/Tax/Financial Advice | Weak Disclaimer | Confidential Information | Data Misrepresentation | Misleading Seller Impression | Other",
+      "explanation": "Brief explanation of the issue"
+    }
+  ]
+}
+
+Be practical and materiality-focused. Do not flag ordinary real estate analysis solely because it estimates value, discusses marketability, or gives pricing posture, as long as limitations and non-appraisal status are clear.
+
+Complete report:
+${reportText}`;
+}
+
+export function buildComplianceRevisionPrompt({ reportText, findings, reportAudience }) {
+  return `You are revising a client-facing real estate valuation report so it can pass a final ethics and professional-compliance review.
+Intended audience: ${reportAudience || 'seller'}.
+
+Revise only what is necessary to address the compliance findings below.
+Rules:
+- Return the complete revised report in Markdown only.
+- Preserve supported property facts, comparable data, prices, citations, MLS numbers, and valuation labels unless a finding specifically identifies them as misleading or unsupported.
+- Do not introduce new facts, new comparable sales, new listings, or new market statistics.
+- Replace discriminatory, steering, or protected-class-coded language with objective property, market, or data-based wording.
+- Soften unsupported certainty and clearly identify assumptions, data limitations, lack of physical inspection, and non-appraisal status.
+- Do not provide legal, tax, lending, investment, or formal appraisal advice.
+- Keep these downstream-readable labels if they exist: "Estimated Market Value Range", "Single Point Estimate", and "Confidence Level".
+- Do not mention this compliance review, internal workflow, model output, drafts, or revisions.
+
+Compliance findings:
+${JSON.stringify(findings || [], null, 2)}
+
+Original report:
+${reportText}`;
+}
+
 export function buildValueExtractionPrompt(reportText) {
   return `You are a valuation range extraction assistant.
 Read the report and return ONLY a JSON object with numeric rangeLow and rangeHigh values.

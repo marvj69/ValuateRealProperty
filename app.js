@@ -170,6 +170,7 @@
             finalReport,
             individualReports: Array.isArray(individualReports) ? individualReports : [],
             progress: {
+                ...progress,
                 total: reportCount,
                 completed: Number.isFinite(progress.completed) ? progress.completed : countFinishedReports(individualReports)
             },
@@ -630,12 +631,16 @@
             progressTitle.innerHTML = '<i class="fas fa-spinner fa-spin text-brand-500"></i>Processing';
         }
         if (finalReportStatus) {
-            const phase = report.metadata?.phase || report.phase || 'reports';
+            const phase = report.progress?.phase || report.metadata?.progress?.phase || report.metadata?.phase || report.phase || 'reports';
             finalReportStatus.textContent = phase === 'validating'
                 ? 'Validating comparable sales...'
                 : phase === 'merging'
                     ? 'Generating the final consensus report...'
-                    : 'The backend is generating this report. It will remain available in your account.';
+                    : phase === 'compliance_review' || phase === 'compliance_rereview'
+                        ? 'Running the final ethics and compliance review...'
+                        : phase === 'compliance_revision'
+                            ? 'Revising the report to satisfy the final compliance review...'
+                            : 'The backend is generating this report. It will remain available in your account.';
         }
         safeStorageSet(ACTIVE_REPORT_STORAGE_KEY, report.id);
     }
