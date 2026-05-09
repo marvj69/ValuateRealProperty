@@ -4,6 +4,19 @@
     const ACTIVE_REPORT_STORAGE_KEY = 'valuate:activeReportId';
     const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
     const MAX_TOTAL_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+    const PDF_BRAND_ASSETS = Object.freeze({
+        realEstateGroup: 'photo assets/906-Real-Estate-Group_Logo-2024_Black.png',
+        coldwellBanker: 'photo assets/CBlobo.png'
+    });
+    const PDF_BRAND_THEME = Object.freeze({
+        navy: '#002068',
+        lake: '#6888a0',
+        ink: '#050505',
+        paper: '#ffffff',
+        mist: '#eef4f7',
+        line: '#d8e2e8',
+        muted: '#526371'
+    });
 
     const form = document.getElementById('reportForm');
     const generateBtn = document.getElementById('generateBtn');
@@ -912,6 +925,10 @@
         return div.innerHTML;
     }
 
+    function escapeAttribute(value) {
+        return escapeHtml(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function getReportAddress(report = appState.currentReport) {
         return report?.inputs?.propertyAddress
             || report?.finalReport?.inferredAddress
@@ -920,8 +937,174 @@
             || 'Address not provided';
     }
 
+    function blobToDataUrl(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    async function resolvePdfAsset(path) {
+        const url = new URL(path, window.location.href).href;
+        try {
+            const response = await fetch(url, { cache: 'force-cache' });
+            if (!response.ok) throw new Error(`Asset request failed with ${response.status}`);
+            return await blobToDataUrl(await response.blob());
+        } catch (error) {
+            console.warn(`PDF asset could not be embedded from ${path}. Falling back to URL.`, error);
+            return url;
+        }
+    }
+
+    async function loadPdfBrandAssets() {
+        const [realEstateGroup, coldwellBanker] = await Promise.all([
+            resolvePdfAsset(PDF_BRAND_ASSETS.realEstateGroup),
+            resolvePdfAsset(PDF_BRAND_ASSETS.coldwellBanker)
+        ]);
+        return { realEstateGroup, coldwellBanker };
+    }
+
+    function normalizePdfReportHtml(html) {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html;
+
+        wrapper.querySelectorAll('.table-scroll').forEach((scrollWrapper) => {
+            const children = Array.from(scrollWrapper.children);
+            const onlyTable = children.length === 1 && children[0]?.tagName === 'TABLE';
+            if (onlyTable) {
+                scrollWrapper.replaceWith(children[0]);
+            } else {
+                scrollWrapper.classList.remove('table-scroll');
+            }
+        });
+
+        wrapper.querySelectorAll('a').forEach((link) => {
+            const href = link.getAttribute('href');
+            link.removeAttribute('target');
+            link.removeAttribute('rel');
+            if (href && !link.textContent.includes(href)) {
+                const urlLabel = document.createElement('span');
+                urlLabel.className = 'pdf-link-url';
+                urlLabel.textContent = ` (${href})`;
+                link.insertAdjacentElement('afterend', urlLabel);
+            }
+        });
+
+        wrapper.querySelectorAll('img').forEach((image) => {
+            image.removeAttribute('width');
+            image.removeAttribute('height');
+            image.loading = 'eager';
+        });
+
+        return wrapper.innerHTML;
+    }
+
+    function formatPdfValueSummary(value) {
+        if (value?.rangeLow && value?.rangeHigh) {
+            return `${formatCurrency(value.rangeLow)} - ${formatCurrency(value.rangeHigh)}`;
+        }
+        if (value?.pointEstimate) return formatCurrency(value.pointEstimate);
+        return '';
+    }
+
+    function buildPdfSummaryItems(report, address, contentText) {
+        const finalReport = report?.finalReport || {};
+        const output = report?.output || {};
+        const inputs = report?.inputs || {};
+        const valuations = finalReport.valuations
+            || output.valuations
+            || requestState.finalValueRange
+            || extractValuations(contentText || '');
+        const mergedValue = mergeValueRange(
+            valuations,
+            finalReport.valueRange || output.valueRange || requestState.finalValueRange
+        );
+        const promptLabel = inputs.promptKey === 'experimental' ? 'Bank-Grade CMA' : 'Standard Valuation';
+
+        return [
+            { label: 'Subject property', value: address },
+            { label: 'Prepared for', value: formatHistoryAudience(inputs.reportAudience || finalReport.reportAudience || 'seller') },
+            { label: 'Analysis style', value: promptLabel },
+            { label: 'Valuation', value: formatPdfValueSummary(mergedValue) || 'See consensus analysis' },
+            { label: 'Generated', value: formatHistoryDate(report?.createdAt || report?.created_at || new Date().toISOString()) }
+        ];
+    }
+
+    function applyPdfTheme(element) {
+        Object.entries(PDF_BRAND_THEME).forEach(([key, value]) => {
+            element.style.setProperty(`--pdf-${key}`, value);
+        });
+    }
+
+    function buildPdfExportDocument({ address, logos, reportHtml, summaryItems }) {
+        const summaryMarkup = summaryItems.map((item) => `
+            <div class="pdf-summary-item">
+                <dt>${escapeHtml(item.label)}</dt>
+                <dd>${escapeHtml(item.value)}</dd>
+            </div>
+        `).join('');
+
+        const realEstateLogo = escapeAttribute(logos.realEstateGroup);
+        const coldwellLogo = escapeAttribute(logos.coldwellBanker);
+        const exportDocument = document.createElement('article');
+        exportDocument.className = 'pdf-export';
+        exportDocument.setAttribute('aria-label', 'PDF valuation report export');
+        exportDocument.innerHTML = `
+            <section class="pdf-cover">
+                <div class="pdf-cover-content">
+                    <div class="pdf-logo-lockup" aria-label="Brokerage logos">
+                        <img class="pdf-logo pdf-logo-906" src="${realEstateLogo}" alt="906 Real Estate Group">
+                        <span class="pdf-logo-divider" aria-hidden="true"></span>
+                        <img class="pdf-logo pdf-logo-cb" src="${coldwellLogo}" alt="Coldwell Banker Schmidt Realtors">
+                    </div>
+                    <div class="pdf-title-block">
+                        <p class="pdf-eyebrow">AI valuation engine</p>
+                        <h1>Comparative Market Analysis</h1>
+                        <p class="pdf-address">${escapeHtml(address)}</p>
+                    </div>
+                    <dl class="pdf-summary-grid">${summaryMarkup}</dl>
+                </div>
+            </section>
+            <section class="pdf-report-page">
+                <header class="pdf-report-header">
+                    <div>
+                        <p class="pdf-report-kicker">Final consensus report</p>
+                        <h2>${escapeHtml(address)}</h2>
+                    </div>
+                    <div class="pdf-header-logo-pair" aria-label="Brokerage logos">
+                        <img class="pdf-logo pdf-logo-906" src="${realEstateLogo}" alt="906 Real Estate Group">
+                        <img class="pdf-logo pdf-logo-cb" src="${coldwellLogo}" alt="Coldwell Banker Schmidt Realtors">
+                    </div>
+                </header>
+                <div class="pdf-report-content">${reportHtml}</div>
+            </section>
+            <section class="pdf-disclaimer">
+                <strong>Disclaimer:</strong> This AI-generated estimate is based on available data and model analysis. It is not an official appraisal, inspection, lending decision, or guarantee of market value. Consult a licensed professional before making financial decisions.
+            </section>
+        `;
+        applyPdfTheme(exportDocument);
+        return exportDocument;
+    }
+
+    function waitForPdfImages(container) {
+        const images = Array.from(container.querySelectorAll('img'));
+        return Promise.all(images.map((image) => {
+            if (image.complete && image.naturalWidth > 0) return Promise.resolve();
+            return new Promise((resolve) => {
+                image.onload = resolve;
+                image.onerror = resolve;
+            });
+        }));
+    }
+
+    function buildPdfFileName(address) {
+        return `${address.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'valuation-report'}.pdf`;
+    }
+
     async function saveFinalReportAsPDF() {
-        if (!finalReportContent?.innerHTML.trim()) {
+        if (!finalReportContent?.textContent.trim()) {
             alert('Generate or load a completed report before saving as PDF.');
             return;
         }
@@ -938,26 +1121,39 @@
 
         try {
             const address = getReportAddress();
-            const exportContainer = document.createElement('div');
-            exportContainer.className = 'pdf-export';
-            exportContainer.innerHTML = `
-                <div style="font-family: Arial, sans-serif; color: #0f172a; padding: 24px;">
-                    <h1 style="font-size: 24px; margin: 0 0 8px;">Valuation Report</h1>
-                    <p style="margin: 0 0 24px; color: #475569;">${escapeHtml(address)}</p>
-                    <div>${finalReportContent.innerHTML}</div>
-                    <p style="margin-top: 24px; font-size: 11px; color: #64748b;">This AI-generated estimate is not an official appraisal. Consult a licensed professional for financial decisions.</p>
-                </div>
-            `;
+            const logos = await loadPdfBrandAssets();
+            const reportHtml = normalizePdfReportHtml(finalReportContent.innerHTML);
+            const exportDocument = buildPdfExportDocument({
+                address,
+                logos,
+                reportHtml,
+                summaryItems: buildPdfSummaryItems(appState.currentReport, address, finalReportContent.textContent)
+            });
 
-            const fileName = `${address.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'valuation-report'}.pdf`;
+            if (document.fonts?.ready) await document.fonts.ready.catch(() => null);
+            await waitForPdfImages(exportDocument);
+
+            const fileName = buildPdfFileName(address);
             await window.html2pdf()
                 .set({
-                    margin: 0.4,
+                    margin: 0,
                     filename: fileName,
-                    html2canvas: { scale: 2, useCORS: true },
-                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+                    image: { type: 'jpeg', quality: 0.98 },
+                    pagebreak: {
+                        mode: ['css', 'legacy'],
+                        avoid: ['tr', 'thead', 'blockquote', 'h1', 'h2', 'h3', '.pdf-logo-lockup', '.pdf-summary-item', '.pdf-report-header']
+                    },
+                    html2canvas: {
+                        scale: 2,
+                        useCORS: true,
+                        allowTaint: false,
+                        backgroundColor: '#ffffff',
+                        imageTimeout: 15000,
+                        logging: false
+                    },
+                    jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait', compress: true }
                 })
-                .from(exportContainer)
+                .from(exportDocument)
                 .save();
         } catch (error) {
             console.error('PDF export failed:', error);
