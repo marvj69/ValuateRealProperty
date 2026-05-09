@@ -1141,7 +1141,20 @@
                     image: { type: 'jpeg', quality: 0.98 },
                     pagebreak: {
                         mode: ['css', 'legacy'],
-                        avoid: ['tr', 'thead', 'blockquote', 'h1', 'h2', 'h3', '.pdf-logo-lockup', '.pdf-summary-item', '.pdf-report-header']
+                        avoid: [
+                            '.pdf-logo-lockup',
+                            '.pdf-summary-item',
+                            '.pdf-report-header',
+                            '.pdf-report-content h1',
+                            '.pdf-report-content h2',
+                            '.pdf-report-content h3',
+                            '.pdf-report-content h4',
+                            '.pdf-report-content p',
+                            '.pdf-report-content li',
+                            '.pdf-report-content blockquote',
+                            '.pdf-report-content tr',
+                            '.pdf-report-content thead'
+                        ]
                     },
                     html2canvas: {
                         scale: 2,
@@ -1149,7 +1162,8 @@
                         allowTaint: false,
                         backgroundColor: '#ffffff',
                         imageTimeout: 15000,
-                        logging: false
+                        logging: false,
+                        scrollY: 0
                     },
                     jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait', compress: true }
                 })

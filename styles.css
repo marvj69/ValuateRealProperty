@@ -358,7 +358,7 @@
         }
 
         .pdf-report-page {
-            padding: 0.48in 0.56in 0.42in;
+            padding: 0.48in 0.56in 0.72in;
             background: #ffffff;
         }
 
@@ -419,6 +419,15 @@
         .pdf-report-content h4 {
             page-break-after: avoid;
             break-after: avoid;
+        }
+
+        .pdf-report-content p,
+        .pdf-report-content li,
+        .pdf-report-content blockquote {
+            page-break-inside: avoid;
+            break-inside: avoid;
+            orphans: 3;
+            widows: 3;
         }
 
         .pdf-report-content h1 {

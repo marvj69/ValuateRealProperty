@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v3.2';
+const CACHE_VERSION = 'v3.3';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
@@ -7,7 +7,7 @@ const PRECACHE_URLS = [
   './',
   './index.html',
   './styles.css',
-  './app.js?v=3.2',
+  './app.js?v=3.3',
   './tailwind-config.js',
   './manifest.json',
   './icons/icon-192.png',
