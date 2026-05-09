@@ -1,5 +1,5 @@
-import { getUserFromRequest } from '../lib/auth.js';
-import { handleError, json, methodNotAllowed } from '../lib/http.js';
+import { getUserFromRequest } from '../../server/lib/auth.js';
+import { handleError, json, methodNotAllowed } from '../../server/lib/http.js';
 
 export default async function handler(req, res) {
   try {

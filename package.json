@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   },
   "scripts": {
-    "check": "node --check api/auth/login.js && node --check api/auth/logout.js && node --check api/auth/me.js && node --check api/reports/index.js && node --check api/reports/[id].js && node --check api/reports/[id]/retry.js && node --check api/worker.js"
+    "build": "npm run check",
+    "check": "find api server -name '*.js' -print0 | xargs -0 -n1 node --check"
   },
   "dependencies": {
     "@vercel/functions": "^3.5.1",

@@ -1,12 +1,12 @@
 import { waitUntil } from '@vercel/functions';
-import { requireUser } from '../../lib/auth.js';
+import { requireUser } from '../../../server/lib/auth.js';
 import {
   firstQueryValue,
   handleError,
   json,
   methodNotAllowed
-} from '../../lib/http.js';
-import { processReportById, retryReportForUser } from '../../lib/reports.js';
+} from '../../../server/lib/http.js';
+import { processReportById, retryReportForUser } from '../../../server/lib/reports.js';
 
 export default async function handler(req, res) {
   try {

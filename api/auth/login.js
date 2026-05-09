@@ -1,5 +1,5 @@
-import { createSessionCookie, normalizeEmail, verifyAccessCode } from '../lib/auth.js';
-import { handleError, json, methodNotAllowed, readJson } from '../lib/http.js';
+import { createSessionCookie, normalizeEmail, verifyAccessCode } from '../../server/lib/auth.js';
+import { handleError, json, methodNotAllowed, readJson } from '../../server/lib/http.js';
 
 export default async function handler(req, res) {
   try {

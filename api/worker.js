@@ -1,12 +1,12 @@
-import { getUserFromRequest } from './lib/auth.js';
+import { getUserFromRequest } from '../server/lib/auth.js';
 import {
   firstQueryValue,
   handleError,
   HttpError,
   json,
   methodNotAllowed
-} from './lib/http.js';
-import { processAvailableReports } from './lib/reports.js';
+} from '../server/lib/http.js';
+import { processAvailableReports } from '../server/lib/reports.js';
 
 function parseLimit(req) {
   const value = firstQueryValue(req.query?.limit);

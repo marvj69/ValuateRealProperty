@@ -1,7 +1,7 @@
 import { waitUntil } from '@vercel/functions';
-import { requireUser } from '../lib/auth.js';
-import { handleError, json, methodNotAllowed, readJson } from '../lib/http.js';
-import { createReportJob, listReportsForUser, processReportById } from '../lib/reports.js';
+import { requireUser } from '../../server/lib/auth.js';
+import { handleError, json, methodNotAllowed, readJson } from '../../server/lib/http.js';
+import { createReportJob, listReportsForUser, processReportById } from '../../server/lib/reports.js';
 
 export default async function handler(req, res) {
   try {
