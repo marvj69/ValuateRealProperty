@@ -29,6 +29,11 @@ async function createSchema() {
   `;
 
   await sql`
+    ALTER TABLE app_users
+    ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}'::jsonb
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS report_jobs (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,

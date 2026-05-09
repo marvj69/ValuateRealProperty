@@ -84,6 +84,10 @@
         finalValueRange: null
     };
 
+    let userSettingsRevision = 0;
+    let userSettingsSaveTimer = null;
+    let userSettingsChangedThisSession = false;
+
     function safeStorageGet(key) {
         try {
             return window.localStorage?.getItem(key) || null;
@@ -138,23 +142,94 @@
         }, {});
     }
 
-    function saveUserSettings() {
-        safeStorageSet(USER_SETTINGS_STORAGE_KEY, JSON.stringify(getCurrentUserSettings()));
+    function cacheUserSettings(settings = getCurrentUserSettings()) {
+        safeStorageSet(USER_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+        return settings;
     }
 
-    function applyStoredUserSettings() {
-        const storedSettings = getStoredUserSettings();
-
+    function applyUserSettings(settings = {}) {
         Object.entries(USER_SETTINGS_FIELDS).forEach(([key, field]) => {
             const select = document.getElementById(field.elementId);
             if (!select) return;
 
-            const storedValue = storedSettings[key];
-            const nextValue = hasSelectOption(select, storedValue) ? storedValue : field.defaultValue;
+            const settingValue = settings[key];
+            const nextValue = hasSelectOption(select, settingValue) ? settingValue : field.defaultValue;
             if (hasSelectOption(select, nextValue)) {
                 select.value = nextValue;
             }
         });
+    }
+
+    function applyStoredUserSettings() {
+        applyUserSettings(getStoredUserSettings());
+    }
+
+    async function persistUserSettings(settings = getCurrentUserSettings(), revision = userSettingsRevision) {
+        if (!appState.user) return settings;
+        const data = await apiRequest('/api/user/settings', {
+            method: 'PATCH',
+            body: { settings }
+        });
+        const savedSettings = data.settings || settings;
+        if (revision === userSettingsRevision) {
+            applyUserSettings(savedSettings);
+            cacheUserSettings(getCurrentUserSettings());
+            userSettingsChangedThisSession = false;
+        }
+        return savedSettings;
+    }
+
+    function saveUserSettings(options = {}) {
+        const syncRemote = options.syncRemote !== false;
+        const immediate = options.immediate === true;
+        const settings = cacheUserSettings(getCurrentUserSettings());
+        userSettingsChangedThisSession = true;
+        userSettingsRevision += 1;
+        const revision = userSettingsRevision;
+
+        if (!syncRemote || !appState.user) {
+            return Promise.resolve(settings);
+        }
+
+        if (userSettingsSaveTimer) {
+            window.clearTimeout(userSettingsSaveTimer);
+            userSettingsSaveTimer = null;
+        }
+
+        if (immediate) {
+            return persistUserSettings(settings, revision);
+        }
+
+        userSettingsSaveTimer = window.setTimeout(() => {
+            userSettingsSaveTimer = null;
+            persistUserSettings(getCurrentUserSettings(), userSettingsRevision)
+                .catch((error) => console.warn('Failed to save user settings.', error));
+        }, 400);
+
+        return Promise.resolve(settings);
+    }
+
+    async function syncUserSettingsAfterAuth(serverSettings = null) {
+        if (!appState.user) return;
+
+        if (userSettingsChangedThisSession) {
+            if (userSettingsSaveTimer) {
+                window.clearTimeout(userSettingsSaveTimer);
+                userSettingsSaveTimer = null;
+            }
+            await persistUserSettings(getCurrentUserSettings(), userSettingsRevision);
+            return;
+        }
+
+        let settings = serverSettings;
+        if (!settings) {
+            const data = await apiRequest('/api/user/settings');
+            settings = data.settings;
+        }
+        if (settings) {
+            applyUserSettings(settings);
+            cacheUserSettings(getCurrentUserSettings());
+        }
     }
 
     function wireUserSettingsPersistence() {
@@ -320,6 +395,10 @@
         try {
             const data = await apiRequest('/api/auth/me');
             appState.user = data.user || null;
+            if (appState.user) {
+                await syncUserSettingsAfterAuth(data.settings)
+                    .catch((error) => console.warn('Failed to load user settings.', error));
+            }
         } catch (error) {
             appState.user = null;
         }
@@ -366,6 +445,8 @@
             appState.user = data.user || null;
             if (authPassword) authPassword.value = '';
             updateAuthUi();
+            await syncUserSettingsAfterAuth(data.settings)
+                .catch((error) => console.warn('Failed to sync user settings.', error));
             await refreshHistoryList();
         } catch (error) {
             alert(error.message || 'Sign in failed.');
@@ -392,6 +473,8 @@
             appState.user = data.user || null;
             if (authPassword) authPassword.value = '';
             updateAuthUi();
+            await syncUserSettingsAfterAuth(data.settings)
+                .catch((error) => console.warn('Failed to sync user settings.', error));
             await refreshHistoryList();
         } catch (error) {
             alert(error.message || 'Account creation failed.');
@@ -409,6 +492,11 @@
         appState.user = null;
         appState.history = [];
         appState.activeReportId = null;
+        userSettingsChangedThisSession = false;
+        if (userSettingsSaveTimer) {
+            window.clearTimeout(userSettingsSaveTimer);
+            userSettingsSaveTimer = null;
+        }
         safeStorageRemove(ACTIVE_REPORT_STORAGE_KEY);
         stopPolling();
         updateAuthUi();

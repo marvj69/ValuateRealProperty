@@ -23,6 +23,7 @@ Choose between two analysis approaches:
 
 ### 💾 Smart Storage & History
 - **Saved Valuations**: Automatically save all reports to the authenticated user's backend account
+- **Account Settings**: Persist AI model, audience, and report style preferences to the authenticated user's account
 - **Report History**: Access and review past valuations with a convenient history drawer
 - **PDF Export**: Download professional PDF reports with formatted tables and summaries
 
@@ -123,6 +124,7 @@ Choose between two analysis approaches:
 - `POST /api/auth/login` - verify an email/password account and create a signed HttpOnly session cookie
 - `POST /api/auth/logout` - clear the session
 - `GET /api/auth/me` - inspect current auth state
+- `GET|PATCH /api/user/settings` - read or update the signed-in user's report preferences
 - `POST /api/reports` - create a report job
 - `GET /api/reports` - list the signed-in user's reports
 - `GET /api/reports/:id` - read one owned report
