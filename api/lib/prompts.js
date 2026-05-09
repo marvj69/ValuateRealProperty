@@ -1,0 +1,194 @@
+export const DEFAULT_REPORT_MODEL = 'gemini-3-flash-preview';
+
+const STANDARD_TEMPLATE = `Overall Goal: Generate a comprehensive, data-driven real estate market report and reasoned valuation estimate for a specific property, acting as an expert analyst. Prioritize reliable web search for comparable data and perform meticulous self-checking before finalizing the output.
+
+Persona: Act as a highly experienced Senior Real Estate Market Analyst and Appraiser. You specialize in public real estate data, county records where available, market reports, news, and established analytical methods. State assumptions and data source limitations clearly.
+
+Core Directives:
+- Tailor the report to the intended audience: buyer, seller, or investor.
+- Search for recent comparable sales and active/pending listings near the subject property.
+- Prioritize recency, proximity, similarity, public record reliability, and source cross-checking.
+- Evaluate each comparable critically and explain qualitative adjustments.
+- Ensure market findings support the valuation conclusion.
+
+<subject_property>
+{{PROPERTY_ADDRESS}}
+{{PDF_NOTE}}
+{{ADDITIONAL_DETAILS}}
+</subject_property>
+
+<report_audience>
+Intended Audience: {{REPORT_AUDIENCE}}
+</report_audience>
+
+{{SPECIAL_INSTRUCTIONS}}
+
+Required Report Components:
+1. Executive Summary
+2. Property Description & Initial Assessment
+3. Macro Market Analysis
+4. Micro Market Analysis
+5. Comparable Sales Analysis with at least 3 and ideally 5 recent sold comps
+6. Competitive Listing Analysis with 2-3 active or pending competitors
+7. Valuation Estimate using the Sales Comparison Approach
+8. SWOT Analysis
+9. Market Outlook & Conclusion
+
+Formatting:
+- Use Markdown.
+- Use ## headings for main sections and ### headings for subsections.
+- Use tables where helpful.
+- State "Estimated Market Value Range: $XXX,XXX - $YYY,YYY".
+- State "Single Point Estimate: $XXX,XXX".
+- Keep a professional, analytical, objective tone.`;
+
+const EXPERIMENTAL_TEMPLATE = `### SYSTEM ROLE & OBJECTIVE
+You are an elite Senior Real Estate Appraiser and Market Data Scientist. Generate a bank-grade Comparative Market Analysis and Valuation Report.
+
+You do not guess. You act as a skeptical auditor of data. Use verifiable public data and the Sales Comparison Approach.
+
+### INTENDED AUDIENCE
+{{REPORT_AUDIENCE}}
+
+### INPUT DATA
+<SUBJECT_PROPERTY>
+Address: {{PROPERTY_ADDRESS}}
+PDF Context: {{PDF_NOTE}}
+Details: {{ADDITIONAL_DETAILS}}
+</SUBJECT_PROPERTY>
+
+<USER_INSTRUCTIONS>
+{{SPECIAL_INSTRUCTIONS}}
+</USER_INSTRUCTIONS>
+
+### EXECUTION PROTOCOL
+1. Search the subject address for tax records, prior listings, and public record signals.
+2. Search for sold homes in the ZIP/city/neighborhood from the last 6 months when possible.
+3. Search market reports for the current city/neighborhood.
+4. Select the best 3-5 closed sales and 2 active/pending competitors.
+5. Explain why each comp is relevant and how adjustments affect value.
+
+### REQUIRED OUTPUT FORMAT
+# Real Estate Valuation Report: [Insert Property Address]
+**Date:** [Current Date]
+**Analyst Confidence Score:** [Low/Medium/High]
+
+## 1. Executive Summary & Verdict
+- **Estimated Value Range:** $XXX,XXX - $XXX,XXX
+- **Most Probable List Price:** $XXX,XXX
+- **Liquidity Rating:** [Fast/Average/Slow]
+- **Top-Level Insight:** 2-3 sentences.
+
+## 2. Subject Property Anatomy
+- **Facts:** Beds | Baths | SqFt | Lot Size | Year Built
+- **The Hook:** Best feature.
+- **The Drag:** Biggest buyer objection.
+
+## 3. Macro & Micro Market Conditions
+Cite sources for data points.
+
+## 4. Comparable Sales Analysis
+Use a Markdown table with Address, Sold Date, Sold Price, SqFt, Price/SqFt, Distance, Adjustments/Notes.
+
+## 5. Active Competition
+Identify 2 active or pending competitors.
+
+## 6. SWOT Analysis
+
+## 7. Final Valuation Logic
+- **Conservative Liquidation Price:** $XXX,XXX
+- **Fair Market Value:** $XXX,XXX
+- **Aggressive List Price:** $XXX,XXX
+
+**DISCLAIMER:** This is an AI-generated analytical report based on publicly available web data. It is not an official appraisal. Physical inspection was not performed.`;
+
+export function buildReportPrompt(input) {
+  const isExperimental = input.promptKey === 'experimental';
+  const attachments = Array.isArray(input.attachments) ? input.attachments : [];
+  const attachmentNote = attachments.length
+    ? 'Attached files include property PDFs and/or images. Use them as primary sources for subject property details.'
+    : '';
+  const detailsBlock = input.additionalDetails
+    ? (isExperimental ? input.additionalDetails : `Additional Details: ${input.additionalDetails}`)
+    : '';
+  const instructionsBlock = input.specialInstructions
+    ? (isExperimental ? input.specialInstructions : `Special Instructions: ${input.specialInstructions}`)
+    : '';
+
+  const template = isExperimental ? EXPERIMENTAL_TEMPLATE : STANDARD_TEMPLATE;
+  return template
+    .replace('{{PROPERTY_ADDRESS}}', input.propertyAddress || 'Address not provided (see attached files).')
+    .replace('{{ADDITIONAL_DETAILS}}', detailsBlock)
+    .replace('{{SPECIAL_INSTRUCTIONS}}', instructionsBlock)
+    .replace('{{PDF_NOTE}}', attachmentNote)
+    .replace('{{REPORT_AUDIENCE}}', input.reportAudience || 'seller');
+}
+
+export function buildValidationPrompt(reportsText) {
+  return `You are a data verification specialist focused on real estate comps. Extract all comparable sales and active/pending listings from the reports below and verify them.
+
+Verification steps:
+- Confirm each address exists and appears to be a real property.
+- Verify price, date, beds, baths, SqFt, year built, lot size where possible using reputable public sources.
+- If data conflicts, choose the most credible source and note the discrepancy.
+- If you cannot verify an address or at least price plus date, exclude it.
+
+Output format:
+## Validated Comparable Sales
+| Address | Sale Date | Sale Price | Beds | Baths | SqFt | Year Built | Lot Size | Sources | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+
+## Validated Active/Pending Listings
+| Address | List/Pending Date | List Price | Beds | Baths | SqFt | Year Built | Lot Size | Sources | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+
+## Excluded/Unverified
+- Address (reason)
+
+Rules:
+- Do not invent new comps outside the reports.
+- Only correct obvious address errors if a verified match is found.
+- Be conservative when in doubt.
+
+Reports:
+${reportsText}`;
+}
+
+export function buildFinalReportPrompt({ reportsText, validatedCompsContent, reportAudience }) {
+  return `You are a senior real estate analyst. Read all reports below and produce one report that merges and reconciles them into a single authoritative narrative.
+Intended audience: ${reportAudience || 'seller'}.
+
+Requirements:
+- Resolve inconsistencies across reports, favoring data that is cited more consistently or better supported.
+- Combine comps and listings into unified tables and de-duplicate where possible.
+- Preserve the required report structure and formatting from the original reports.
+- Use ## headings for main sections and ### for subsections.
+- Keep a professional, analytical tone.
+- Use the validated comps/listings below as authoritative.
+
+Validated Comparable Sales & Listings:
+${validatedCompsContent}
+
+Reports to Merge:
+${reportsText}`;
+}
+
+export function buildValueExtractionPrompt(reportText) {
+  return `You are a valuation range extraction assistant.
+Read the report and return ONLY a JSON object with numeric rangeLow and rangeHigh values.
+Use whole numbers without commas or currency symbols.
+If no clear value range is present, return "UNKNOWN".
+
+Report:
+${reportText}`;
+}
+
+export function buildAddressExtractionPrompt(reportText) {
+  return `You are an address extraction assistant.
+Return ONLY the full subject property address from the report text.
+Choose the subject property, not comparable listings.
+If no clear subject address is present, return "UNKNOWN".
+
+Report Text:
+${reportText}`;
+}

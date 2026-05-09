@@ -1,6 +1,6 @@
 # Market Intelligence Studio
 
-**MarketIntel** is an AI-powered web application that generates comprehensive real estate property valuation reports using Google's Gemini AI models. Whether you're a buyer, seller, or investor, this tool helps you understand property values through data-driven analysis, comparable sales research, and market intelligence.
+**MarketIntel** is an AI-powered web application that generates comprehensive real estate property valuation reports through a secure Vercel backend workflow. Whether you're a buyer, seller, or investor, this tool helps you understand property values through data-driven analysis, comparable sales research, and market intelligence.
 
 ## Features
 
@@ -22,21 +22,23 @@ Choose between two analysis approaches:
 - **Bank-Grade CMA**: Strict, conservative analysis with rigorous data validation and adjustment grids
 
 ### 💾 Smart Storage & History
-- **Saved Valuations**: Automatically save all reports to your browser's local storage
+- **Saved Valuations**: Automatically save all reports to the authenticated user's backend account
 - **Report History**: Access and review past valuations with a convenient history drawer
 - **PDF Export**: Download professional PDF reports with formatted tables and summaries
 
 ### ⚡ Advanced Capabilities
-- **Background Processing**: Reports continue generating even if you close the browser tab (PWA support)
+- **Background Processing**: Reports run asynchronously in Vercel API functions and remain available when you leave the page
 - **Offline Support**: Progressive Web App with service worker for offline functionality
 - **Real-time Progress**: Track report generation with live status updates
-- **Notification Alerts**: Get notified when your reports are ready
+- **Cross-Device Access**: Return from any logged-in session and view completed or failed reports
 
 ## Getting Started
 
 ### Prerequisites
 - A modern web browser (Chrome, Firefox, Safari, Edge)
-- A Google Gemini API key ([Get one here](https://aistudio.google.com/apikey))
+- A Google Gemini API key configured as a server environment variable
+- Vercel Postgres / Neon connection environment variables
+- An `AUTH_ACCESS_CODE` and `AUTH_SESSION_SECRET` for the built-in signed-cookie auth flow
 
 ### Installation
 
@@ -46,38 +48,31 @@ Choose between two analysis approaches:
    cd valuate
    ```
 
-2. **Serve the application**
-   
-   Since this is a client-side application, you can serve it using any static file server:
-   
-   **Option 1: Using Python**
+2. **Install dependencies**
    ```bash
-   # Python 3
-   python -m http.server 8000
-   
-   # Python 2
-   python -m SimpleHTTPServer 8000
+   npm install
    ```
-   
-   **Option 2: Using Node.js (http-server)**
-   ```bash
-   npx http-server -p 8000
-   ```
-   
-   **Option 3: Using VS Code Live Server**
-   - Install the "Live Server" extension
-   - Right-click on `index.html` and select "Open with Live Server"
 
-3. **Open in your browser**
-   Navigate to `http://localhost:8000` (or the port you specified)
+3. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   ```
+   Fill in `GEMINI_API_KEY`, `AUTH_ACCESS_CODE`, `AUTH_SESSION_SECRET`, `CRON_SECRET`, and your Vercel Postgres / Neon connection values.
+
+4. **Run with Vercel-compatible API routes**
+   ```bash
+   npx vercel dev
+   ```
+
+5. **Open in your browser**
+   Navigate to the local URL printed by Vercel, usually `http://localhost:3000`.
 
 ### First-Time Setup
 
-1. Click the settings icon (⚙️) in the top navigation
-2. Enter your Gemini API key
-3. Optionally check "Remember on this device" to save your API key locally
-4. Select your preferred AI model (default: Gemini 3 Flash)
-5. Configure other settings as needed
+1. Click **Sign in** or the settings icon in the top navigation
+2. Enter your email and the configured access code
+3. Select your preferred AI model and report settings
+4. Configure other settings as needed
 
 ## How to Use
 
@@ -95,8 +90,9 @@ Choose between two analysis approaches:
 
 3. **Generate Analysis**
    - Click "Generate Analysis"
-   - Watch the progress as reports are created
-   - Reports will merge automatically into a final consensus report
+   - The frontend submits the request to `/api/reports` and receives a report ID
+   - Watch the queued/processing/completed/failed status while the backend works
+   - Reports merge automatically into a final consensus report
 
 4. **Review Results**
    - View the final merged report with consensus valuation
@@ -107,18 +103,41 @@ Choose between two analysis approaches:
 
 **Special Instructions**: Click "Add Special Instructions?" to provide specific focus areas (e.g., "Focus on school district quality" or "Emphasize recent renovations")
 
-**Saved Valuations**: Access your report history by clicking the menu icon (☰) in the top navigation. View, manage, or delete saved reports.
+**Saved Valuations**: Access your report history by clicking the menu icon (☰) in the top navigation. View, retry, manage, or delete saved backend reports.
 
-**Background Processing**: When supported by your browser, reports will continue generating even if you close the tab. You'll receive a notification when they're ready.
+**Background Processing**: Reports are persisted in Postgres with `queued`, `processing`, `completed`, or `failed` status. You can leave the page and return later from any signed-in session.
 
 ## Technical Details
 
 ### Architecture
 - **Frontend**: Vanilla JavaScript with Tailwind CSS
-- **AI Integration**: Google Gemini API (v1beta) with web grounding
-- **Storage**: IndexedDB for reports, localStorage for preferences
-- **Service Worker**: Background processing and offline support
+- **Backend**: Vercel API Functions under `api/`
+- **Async Processing**: `POST /api/reports` creates a queued job, returns a report ID, and starts backend processing with `waitUntil`; `/api/worker` can process queued/stale jobs on a cron schedule
+- **AI Integration**: Google Gemini API (v1beta) with web grounding, called only from backend functions
+- **Storage**: Centralized Postgres table `report_jobs`, scoped by authenticated `user_id`
+- **Service Worker**: Static/offline asset caching only
 - **PWA**: Installable Progressive Web App with manifest
+
+### API Routes
+- `POST /api/auth/login` - create a signed HttpOnly session cookie
+- `POST /api/auth/logout` - clear the session
+- `GET /api/auth/me` - inspect current auth state
+- `POST /api/reports` - create a report job
+- `GET /api/reports` - list the signed-in user's reports
+- `GET /api/reports/:id` - read one owned report
+- `DELETE /api/reports/:id` - delete one owned report
+- `POST /api/reports/:id/retry` - retry a failed or queued report when appropriate
+- `GET|POST /api/worker` - process queued jobs, protected by `CRON_SECRET` for cron usage
+
+### Required Environment Variables
+- `GEMINI_API_KEY`: server-side Gemini key
+- `AUTH_ACCESS_CODE`: shared access code accepted by the built-in login route
+- `AUTH_SESSION_SECRET`: long random string used to sign sessions
+- `CRON_SECRET`: bearer token for the scheduled worker endpoint
+- `REPORT_MODEL`: optional default Gemini model
+- Vercel Postgres / Neon variables such as `POSTGRES_URL` or the integration-provided equivalents
+
+Note: attachments are submitted directly to the report creation API and are limited to small PDFs/images. For large documents, add Vercel Blob or another object store and persist file URLs in the report inputs.
 
 ### Supported Models
 - Gemini 3.1 Pro (Preview)
@@ -139,9 +158,12 @@ Note: Background processing and notifications require modern browser support for
 
 ```
 valuate/
+├── api/                # Vercel API functions, auth, DB, report worker
 ├── index.html          # Main application HTML
-├── app.js              # Core application logic
-├── service-worker.js   # Background processing & offline support
+├── app.js              # Frontend UI, auth state, polling, history rendering
+├── service-worker.js   # Static/offline caching
+├── package.json        # Backend dependencies and checks
+├── vercel.json         # Vercel function, cron, and API cache config
 ├── styles.css          # Custom styles
 ├── tailwind-config.js  # Tailwind CSS configuration
 ├── manifest.json       # PWA manifest
@@ -152,9 +174,10 @@ valuate/
 
 ## API Usage & Costs
 
-This application uses Google's Gemini API, which has usage-based pricing. Key points:
+This application uses Google's Gemini API from backend functions only. Key points:
 
-- **API Key Required**: You must provide your own Gemini API key
+- **Server Key Required**: Configure `GEMINI_API_KEY` in the deployment environment
+- **No Browser Secrets**: The frontend never receives or stores the Gemini key
 - **Web Search**: Uses Google's web grounding feature (may have additional costs)
 - **Token Usage**: Reports can be lengthy; monitor your API usage
 - **Rate Limits**: Subject to Google's API rate limits

@@ -1,0 +1,16 @@
+{
+  "name": "valuate-real-property",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node --check api/auth/login.js && node --check api/auth/logout.js && node --check api/auth/me.js && node --check api/reports/index.js && node --check api/reports/[id].js && node --check api/reports/[id]/retry.js && node --check api/worker.js"
+  },
+  "dependencies": {
+    "@vercel/functions": "^3.5.1",
+    "@vercel/postgres": "^0.10.0"
+  }
+}

@@ -1,0 +1,489 @@
+import crypto from 'node:crypto';
+import { ensureSchema, sql } from './db.js';
+import { HttpError } from './http.js';
+import { DEFAULT_REPORT_MODEL, buildReportPrompt } from './prompts.js';
+import { callGemini, normalizeModelName, withRetries } from './gemini.js';
+import { extractValuations, generateMergedReport } from './valuation.js';
+
+const MAX_REPORT_COUNT = 16;
+const DEFAULT_REPORT_COUNT = 16;
+const MAX_ATTACHMENTS = 8;
+const MAX_ATTACHMENT_BASE64_CHARS = 4_000_000;
+const PROCESSING_STALE_MINUTES = 10;
+const WORKER_CONCURRENCY = 4;
+
+function asString(value, maxLength = 20000) {
+  return String(value || '').trim().slice(0, maxLength);
+}
+
+function asBoolean(value, fallback = true) {
+  if (value === undefined || value === null) return fallback;
+  return Boolean(value);
+}
+
+function asReportCount(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_REPORT_COUNT;
+  return Math.min(MAX_REPORT_COUNT, Math.max(1, parsed));
+}
+
+function sanitizeAttachments(attachments) {
+  if (!Array.isArray(attachments)) return [];
+  if (attachments.length > MAX_ATTACHMENTS) {
+    throw new HttpError(400, `At most ${MAX_ATTACHMENTS} attachments are supported.`);
+  }
+
+  let totalSize = 0;
+  return attachments.map((attachment) => {
+    const mimeType = asString(attachment.mimeType || attachment.mime_type, 200);
+    const data = String(attachment.data || '').replace(/^data:[^,]+,/, '');
+    if (!mimeType || !data) {
+      throw new HttpError(400, 'Each attachment must include mimeType and base64 data.');
+    }
+    if (mimeType !== 'application/pdf' && !mimeType.startsWith('image/')) {
+      throw new HttpError(400, 'Only PDF and image attachments are supported.');
+    }
+    totalSize += data.length;
+    if (totalSize > MAX_ATTACHMENT_BASE64_CHARS) {
+      throw new HttpError(413, 'Attachments are too large for this endpoint.');
+    }
+    return {
+      name: asString(attachment.name || 'attachment', 500),
+      mimeType,
+      size: Number.isFinite(attachment.size) ? attachment.size : null,
+      data
+    };
+  });
+}
+
+export function sanitizeReportInput(input = {}) {
+  const attachments = sanitizeAttachments(input.attachments);
+  const propertyAddress = asString(input.propertyAddress, 1000);
+  const additionalDetails = asString(input.additionalDetails);
+
+  if (!propertyAddress && attachments.length === 0) {
+    throw new HttpError(400, 'Provide a propertyAddress or at least one attachment.');
+  }
+
+  const promptKey = input.promptKey === 'standard' ? 'standard' : 'experimental';
+  const reportAudience = ['buyer', 'seller', 'investor'].includes(input.reportAudience)
+    ? input.reportAudience
+    : 'seller';
+  const reportCount = asReportCount(input.reportCount);
+  const model = normalizeModelName(input.model || process.env.REPORT_MODEL || DEFAULT_REPORT_MODEL);
+
+  return {
+    propertyAddress,
+    additionalDetails,
+    specialInstructions: asString(input.specialInstructions),
+    reportAudience,
+    promptKey,
+    reportCount,
+    enableSearch: asBoolean(input.enableSearch, true),
+    model,
+    attachments
+  };
+}
+
+function jsonParam(value) {
+  return JSON.stringify(value);
+}
+
+function normalizeDate(value) {
+  return value?.toISOString?.() || value || null;
+}
+
+export function normalizeReportRow(row, { includePayload = false, includeReports = false } = {}) {
+  if (!row) return null;
+  const payload = row.payload || {};
+  const inputMetadata = {
+    ...payload,
+    attachments: Array.isArray(payload.attachments)
+      ? payload.attachments.map((attachment) => ({
+          name: attachment.name || 'attachment',
+          mimeType: attachment.mimeType,
+          size: attachment.size || null
+        }))
+      : []
+  };
+  const individualReports = includeReports ? row.reports || [] : undefined;
+  const output = {
+    finalReport: row.final_report || null,
+    individualReports
+  };
+  const metadata = {
+    reportCount: row.report_count,
+    progress: row.progress || {},
+    attempts: row.attempts
+  };
+
+  return {
+    id: row.id,
+    userId: row.user_id,
+    userEmail: row.user_email,
+    status: row.status,
+    reportCount: row.report_count,
+    progress: row.progress || {},
+    error: row.error || null,
+    attempts: row.attempts,
+    createdAt: normalizeDate(row.created_at),
+    updatedAt: normalizeDate(row.updated_at),
+    startedAt: normalizeDate(row.started_at),
+    completedAt: normalizeDate(row.completed_at),
+    finalReport: row.final_report || null,
+    reports: includeReports ? row.reports || [] : undefined,
+    inputs: inputMetadata,
+    output,
+    metadata,
+    payload: includePayload ? inputMetadata : undefined
+  };
+}
+
+export async function createReportJob(user, input) {
+  await ensureSchema();
+  const payload = sanitizeReportInput(input);
+  const id = crypto.randomUUID();
+  const progress = { total: payload.reportCount, completed: 0, phase: 'queued' };
+
+  const { rows } = await sql`
+    INSERT INTO report_jobs (
+      id,
+      user_id,
+      user_email,
+      status,
+      payload,
+      report_count,
+      reports,
+      progress
+    )
+    VALUES (
+      ${id},
+      ${user.userId},
+      ${user.email},
+      'queued',
+      ${jsonParam(payload)}::jsonb,
+      ${payload.reportCount},
+      '[]'::jsonb,
+      ${jsonParam(progress)}::jsonb
+    )
+    RETURNING *
+  `;
+
+  return normalizeReportRow(rows[0], { includePayload: true, includeReports: true });
+}
+
+export async function listReportsForUser(user) {
+  await ensureSchema();
+  const { rows } = await sql`
+    SELECT *
+    FROM report_jobs
+    WHERE user_id = ${user.userId}
+    ORDER BY created_at DESC
+    LIMIT 100
+  `;
+  return rows.map((row) => normalizeReportRow(row, { includePayload: true }));
+}
+
+export async function getReportForUser(user, id) {
+  await ensureSchema();
+  const { rows } = await sql`
+    SELECT *
+    FROM report_jobs
+    WHERE id = ${id} AND user_id = ${user.userId}
+    LIMIT 1
+  `;
+  if (!rows[0]) {
+    throw new HttpError(404, 'Report not found.');
+  }
+  return normalizeReportRow(rows[0], { includePayload: true, includeReports: true });
+}
+
+export async function deleteReportForUser(user, id) {
+  await ensureSchema();
+  const { rows } = await sql`
+    DELETE FROM report_jobs
+    WHERE id = ${id} AND user_id = ${user.userId}
+    RETURNING id
+  `;
+  if (!rows[0]) {
+    throw new HttpError(404, 'Report not found.');
+  }
+  return { id: rows[0].id, deleted: true };
+}
+
+export async function retryReportForUser(user, id) {
+  await ensureSchema();
+  const progress = { total: DEFAULT_REPORT_COUNT, completed: 0, phase: 'queued' };
+  const { rows } = await sql`
+    UPDATE report_jobs
+    SET
+      status = 'queued',
+      reports = '[]'::jsonb,
+      final_report = NULL,
+      progress = jsonb_set(${jsonParam(progress)}::jsonb, '{total}', to_jsonb(report_count)),
+      error = NULL,
+      started_at = NULL,
+      completed_at = NULL,
+      updated_at = now()
+    WHERE id = ${id}
+      AND user_id = ${user.userId}
+      AND status <> 'processing'
+    RETURNING *
+  `;
+  if (!rows[0]) {
+    const existing = await getReportForUser(user, id);
+    if (existing.status === 'processing') {
+      throw new HttpError(409, 'Report is already processing.');
+    }
+    throw new HttpError(404, 'Report not found.');
+  }
+  return normalizeReportRow(rows[0], { includePayload: true, includeReports: true });
+}
+
+async function claimReportById(id) {
+  await ensureSchema();
+  const { rows } = await sql`
+    UPDATE report_jobs
+    SET
+      status = 'processing',
+      attempts = attempts + 1,
+      started_at = COALESCE(started_at, now()),
+      updated_at = now(),
+      error = NULL,
+      progress = jsonb_set(progress, '{phase}', to_jsonb('processing'::text), true)
+    WHERE id = ${id} AND status = 'queued'
+    RETURNING *
+  `;
+  return rows[0] || null;
+}
+
+async function claimAvailableReports({ limit = 1, userId = null } = {}) {
+  await ensureSchema();
+  const cappedLimit = Math.min(5, Math.max(1, Number.parseInt(limit, 10) || 1));
+
+  if (userId) {
+    const { rows } = await sql`
+      WITH candidate AS (
+        SELECT id
+        FROM report_jobs
+        WHERE user_id = ${userId}
+          AND (
+            status = 'queued'
+            OR (status = 'processing' AND updated_at < now() - (${PROCESSING_STALE_MINUTES} || ' minutes')::interval)
+          )
+        ORDER BY created_at ASC
+        LIMIT ${cappedLimit}
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE report_jobs
+      SET
+        status = 'processing',
+        attempts = attempts + 1,
+        started_at = COALESCE(started_at, now()),
+        updated_at = now(),
+        error = NULL,
+        progress = jsonb_set(progress, '{phase}', to_jsonb('processing'::text), true)
+      WHERE id IN (SELECT id FROM candidate)
+      RETURNING *
+    `;
+    return rows;
+  }
+
+  const { rows } = await sql`
+    WITH candidate AS (
+      SELECT id
+      FROM report_jobs
+      WHERE status = 'queued'
+        OR (status = 'processing' AND updated_at < now() - (${PROCESSING_STALE_MINUTES} || ' minutes')::interval)
+      ORDER BY created_at ASC
+      LIMIT ${cappedLimit}
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE report_jobs
+    SET
+      status = 'processing',
+      attempts = attempts + 1,
+      started_at = COALESCE(started_at, now()),
+      updated_at = now(),
+      error = NULL,
+      progress = jsonb_set(progress, '{phase}', to_jsonb('processing'::text), true)
+    WHERE id IN (SELECT id FROM candidate)
+    RETURNING *
+  `;
+  return rows;
+}
+
+async function updateReportProgress(id, reports, progress) {
+  await sql`
+    UPDATE report_jobs
+    SET
+      reports = ${jsonParam(reports)}::jsonb,
+      progress = ${jsonParam(progress)}::jsonb,
+      updated_at = now()
+    WHERE id = ${id}
+  `;
+}
+
+async function markReportCompleted(id, reports, finalReport, reportCount) {
+  const progress = {
+    total: reportCount,
+    completed: reportCount,
+    phase: 'completed'
+  };
+  const { rows } = await sql`
+    UPDATE report_jobs
+    SET
+      status = 'completed',
+      reports = ${jsonParam(reports)}::jsonb,
+      final_report = ${jsonParam(finalReport)}::jsonb,
+      progress = ${jsonParam(progress)}::jsonb,
+      error = NULL,
+      updated_at = now(),
+      completed_at = now()
+    WHERE id = ${id}
+    RETURNING *
+  `;
+  return rows[0];
+}
+
+async function markReportFailed(id, message, reports = [], reportCount = DEFAULT_REPORT_COUNT) {
+  const completed = reports.filter(Boolean).length;
+  const progress = {
+    total: reportCount,
+    completed,
+    phase: 'failed'
+  };
+  const { rows } = await sql`
+    UPDATE report_jobs
+    SET
+      status = 'failed',
+      reports = ${jsonParam(reports)}::jsonb,
+      progress = ${jsonParam(progress)}::jsonb,
+      error = ${String(message || 'Report processing failed.')},
+      updated_at = now(),
+      completed_at = now()
+    WHERE id = ${id}
+    RETURNING *
+  `;
+  return rows[0];
+}
+
+async function runPool(items, concurrency, worker) {
+  const queue = [...items];
+  const runners = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    while (queue.length > 0) {
+      const item = queue.shift();
+      await worker(item);
+    }
+  });
+  await Promise.all(runners);
+}
+
+async function processClaimedReport(row) {
+  const payload = sanitizeReportInput(row.payload || {});
+  const prompt = buildReportPrompt(payload);
+  const reportCount = payload.reportCount;
+  const reports = Array.from({ length: reportCount }, () => null);
+  let completed = 0;
+
+  try {
+    await runPool(
+      Array.from({ length: reportCount }, (_, index) => index),
+      WORKER_CONCURRENCY,
+      async (index) => {
+        try {
+          const result = await withRetries(
+            () => callGemini({
+              model: payload.model,
+              prompt,
+              enableSearch: payload.enableSearch,
+              index,
+              attachments: payload.attachments
+            }),
+            { retries: 2, delayMs: 1500 }
+          );
+          reports[index] = {
+            index,
+            success: true,
+            content: result.content,
+            searchSuggestions: result.searchSuggestions || [],
+            valuations: extractValuations(result.content)
+          };
+        } catch (error) {
+          reports[index] = {
+            index,
+            success: false,
+            error: error.message || 'Unknown Gemini error'
+          };
+        } finally {
+          completed += 1;
+          await updateReportProgress(row.id, reports, {
+            total: reportCount,
+            completed,
+            phase: 'reports'
+          });
+        }
+      }
+    );
+
+    const successfulReports = reports.filter((report) => report?.success);
+    if (successfulReports.length === 0) {
+      throw new Error('No successful report drafts were generated.');
+    }
+
+    await updateReportProgress(row.id, reports, {
+      total: reportCount,
+      completed,
+      phase: 'merging'
+    });
+
+    const finalReport = await generateMergedReport({
+      successfulReports,
+      reportAudience: payload.reportAudience,
+      model: payload.model,
+      enableSearch: payload.enableSearch
+    });
+
+    finalReport.model = payload.model;
+    finalReport.promptKey = payload.promptKey;
+    finalReport.reportAudience = payload.reportAudience;
+    finalReport.propertyAddress = payload.propertyAddress || finalReport.inferredAddress || '';
+
+    const completedRow = await markReportCompleted(row.id, reports, finalReport, reportCount);
+    return normalizeReportRow(completedRow, { includePayload: true, includeReports: true });
+  } catch (error) {
+    const failedRow = await markReportFailed(
+      row.id,
+      error.message || 'Report processing failed.',
+      reports,
+      reportCount
+    );
+    return normalizeReportRow(failedRow, { includePayload: true, includeReports: true });
+  }
+}
+
+export async function processReportById(id) {
+  const claimed = await claimReportById(id);
+  if (!claimed) {
+    return { processed: 0, skipped: true };
+  }
+  const report = await processClaimedReport(claimed);
+  return { processed: 1, reports: [report] };
+}
+
+export async function processAvailableReports({ limit = 1, userId = null } = {}) {
+  const claimed = await claimAvailableReports({ limit, userId });
+  const processed = [];
+  for (const row of claimed) {
+    processed.push(await processClaimedReport(row));
+  }
+  return {
+    claimed: claimed.length,
+    processed: processed.length,
+    reports: processed.map((report) => ({
+      id: report.id,
+      status: report.status,
+      error: report.error
+    }))
+  };
+}
