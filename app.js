@@ -2,8 +2,14 @@
     const DEFAULT_REPORT_COUNT = 16;
     const POLL_INTERVAL_MS = 3500;
     const ACTIVE_REPORT_STORAGE_KEY = 'valuate:activeReportId';
+    const USER_SETTINGS_STORAGE_KEY = 'valuate:userSettings:v1';
     const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
     const MAX_TOTAL_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+    const USER_SETTINGS_FIELDS = Object.freeze({
+        model: { elementId: 'modelSelect', defaultValue: 'gemini-flash-lite-latest' },
+        reportAudience: { elementId: 'reportAudience', defaultValue: 'seller' },
+        promptKey: { elementId: 'promptSelect', defaultValue: 'experimental' }
+    });
     const PDF_BRAND_ASSETS = Object.freeze({
         realEstateGroup: 'photo assets/906-Real-Estate-Group_Logo-2024_Black.png',
         coldwellBanker: 'photo assets/CBlobo.png'
@@ -100,6 +106,61 @@
         } catch (error) {
             // Ignore storage failures.
         }
+    }
+
+    function readStoredJson(key, fallback = null) {
+        const rawValue = safeStorageGet(key);
+        if (!rawValue) return fallback;
+        try {
+            const parsedValue = JSON.parse(rawValue);
+            return parsedValue && typeof parsedValue === 'object' ? parsedValue : fallback;
+        } catch (error) {
+            safeStorageRemove(key);
+            return fallback;
+        }
+    }
+
+    function hasSelectOption(select, value) {
+        if (!select || typeof value !== 'string') return false;
+        return Array.from(select.options).some((option) => option.value === value);
+    }
+
+    function getStoredUserSettings() {
+        return readStoredJson(USER_SETTINGS_STORAGE_KEY, {});
+    }
+
+    function getCurrentUserSettings() {
+        return Object.entries(USER_SETTINGS_FIELDS).reduce((settings, [key, field]) => {
+            const select = document.getElementById(field.elementId);
+            const selectedValue = select?.value || field.defaultValue;
+            settings[key] = hasSelectOption(select, selectedValue) ? selectedValue : field.defaultValue;
+            return settings;
+        }, {});
+    }
+
+    function saveUserSettings() {
+        safeStorageSet(USER_SETTINGS_STORAGE_KEY, JSON.stringify(getCurrentUserSettings()));
+    }
+
+    function applyStoredUserSettings() {
+        const storedSettings = getStoredUserSettings();
+
+        Object.entries(USER_SETTINGS_FIELDS).forEach(([key, field]) => {
+            const select = document.getElementById(field.elementId);
+            if (!select) return;
+
+            const storedValue = storedSettings[key];
+            const nextValue = hasSelectOption(select, storedValue) ? storedValue : field.defaultValue;
+            if (hasSelectOption(select, nextValue)) {
+                select.value = nextValue;
+            }
+        });
+    }
+
+    function wireUserSettingsPersistence() {
+        Object.values(USER_SETTINGS_FIELDS).forEach((field) => {
+            document.getElementById(field.elementId)?.addEventListener('change', saveUserSettings);
+        });
     }
 
     class ApiError extends Error {
@@ -1442,6 +1503,8 @@
     }
 
     function wireEvents() {
+        wireUserSettingsPersistence();
+
         if (visibleInstructions && specialInstructions) {
             visibleInstructions.addEventListener('input', (event) => {
                 specialInstructions.value = event.target.value;
@@ -1533,6 +1596,7 @@
     async function boot() {
         updateDownloadButtonState(false);
         setNewValuationVisibility(false);
+        applyStoredUserSettings();
         wireEvents();
         await loadCurrentUser();
         await refreshHistoryList();
