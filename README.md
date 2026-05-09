@@ -87,7 +87,6 @@ Choose between two analysis approaches:
 2. **Configure Settings** (optional)
    - Choose your target audience (Buyer/Seller/Investor)
    - Select report style (Standard or Bank-Grade CMA)
-   - Sample size is fixed at 16 reports for consistency
 
 3. **Generate Analysis**
    - Click "Generate Analysis"
