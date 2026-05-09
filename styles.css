@@ -267,17 +267,17 @@
         .pdf-logo {
             display: block;
             object-fit: contain;
+            width: auto;
+            max-width: 100%;
             flex: 0 0 auto;
         }
 
         .pdf-logo-906 {
-            width: 2.44in;
-            max-height: 1.22in;
+            height: 1.08in;
         }
 
         .pdf-logo-cb {
-            width: 2.32in;
-            max-height: 1.08in;
+            height: 0.98in;
         }
 
         .pdf-logo-divider {
@@ -398,13 +398,11 @@
         }
 
         .pdf-header-logo-pair .pdf-logo-906 {
-            width: 1.16in;
-            max-height: 0.58in;
+            height: 0.5in;
         }
 
         .pdf-header-logo-pair .pdf-logo-cb {
-            width: 1.12in;
-            max-height: 0.54in;
+            height: 0.48in;
         }
 
         .pdf-report-content {
