@@ -155,21 +155,60 @@ ${reportsText}`;
 }
 
 export function buildFinalReportPrompt({ reportsText, validatedCompsContent, reportAudience }) {
-  return `You are a senior real estate analyst. Read all reports below and produce one report that merges and reconciles them into a single authoritative narrative.
+  return `You are a senior real estate valuation analyst preparing a polished, client-ready valuation report.
 Intended audience: ${reportAudience || 'seller'}.
 
-Requirements:
-- Resolve inconsistencies across reports, favoring data that is cited more consistently or better supported.
-- Combine comps and listings into unified tables and de-duplicate where possible.
-- Preserve the required report structure and formatting from the original reports.
-- Use ## headings for main sections and ### for subsections.
-- Keep a professional, analytical tone.
-- Use the validated comps/listings below as authoritative.
+Client-facing requirements:
+- Write as a final deliverable prepared directly for the client. Do not mention drafts, source reports, merged reports, consensus generation, reconciliation workflow, validation workflow, model output, or internal process.
+- Use a confident, polished, advisory tone suitable for a real estate client while remaining objective and evidence-based.
+- Tailor emphasis to the intended audience: seller reports should emphasize pricing strategy and marketability; buyer reports should emphasize offer discipline and risk; investor reports should emphasize value support, liquidity, and downside protection.
+- Do not introduce new comparable sales, listings, property facts, prices, dates, or market statistics unless they appear in the evidence below.
+- Preserve citations, source names, MLS numbers, and public-record references when they are available in the evidence.
+- If verified comparable evidence is unavailable or contains internal error/process text, do not repeat that wording. Instead, state the limitation professionally in the Risks, Assumptions & Limitations section.
 
-Validated Comparable Sales & Listings:
+Evidence handling:
+- Use verified comparable sales and listings as the strongest evidence when actual verified data is provided.
+- When facts conflict, favor verified public records, MLS/listing data, county records, and consistently cited facts over unsupported statements.
+- Give greatest valuation weight to closed sales that are recent, nearby, similar in property type, similar in size/condition, and well-supported.
+- Use active and pending listings as market-positioning evidence, not as the primary basis for market value.
+- Exclude or down-weight weak comparables and explain the reason in polished client language.
+- Do not simply average prior value conclusions. Build the final value opinion from the strongest available comparable evidence and market context.
+
+Required output format:
+# Final Real Estate Valuation Report
+
+## Executive Summary
+Include these exact labels so downstream systems can read the valuation:
+- Estimated Market Value Range: $XXX,XXX - $YYY,YYY
+- Single Point Estimate: $XXX,XXX
+- Confidence Level: Low/Medium/High
+Then provide a concise 3-5 sentence client-facing valuation verdict.
+
+## Subject Property Overview
+Summarize the property facts, market position, strengths, and buyer objections. Clearly identify unknowns as assumptions rather than presenting them as facts.
+
+## Market Context
+Summarize relevant macro and local market conditions. Keep this section practical and connected to pricing, demand, liquidity, and negotiation leverage.
+
+## Comparable Sales Analysis
+Provide a deduplicated table with Address, Sale Date, Sale Price, SqFt, Price/SqFt, Distance, Verification/Source, and Adjustment Notes.
+
+## Active & Pending Competition
+Provide a deduplicated table with Address, Status, List/Pending Price, Key Facts, Verification/Source, and Relevance.
+
+## Valuation Rationale
+Explain how the best evidence supports the value range and single point estimate. Discuss adjustments, comp weighting, and how active competition affects pricing strategy.
+
+## Pricing Strategy & Client Guidance
+Give practical guidance tailored to the intended audience. For sellers, include conservative, market, and aspirational pricing posture when supportable. For buyers or investors, include offer-positioning and risk guidance.
+
+## Risks, Assumptions & Limitations
+State data gaps, unverified facts, physical-inspection limitations, source conflicts, and confidence constraints in polished client language.
+
+Verified Comparable Sales & Listings:
 ${validatedCompsContent}
 
-Reports to Merge:
+Internal Research Materials:
 ${reportsText}`;
 }
 
