@@ -141,11 +141,8 @@ Choose between two analysis approaches:
 Note: attachments are submitted directly to the report creation API and are limited to small PDFs/images. For large documents, add Vercel Blob or another object store and persist file URLs in the report inputs.
 
 ### Supported Models
-- Gemini 3.1 Pro (Preview)
-- Gemini 3.1 Flash-Lite (Preview)
-- Gemini 3 Flash (Preview) - Recommended
-- Gemini 2.5 Flash
-- Gemini 2.5 Pro
+- Fast (`gemini-flash-lite-latest`) - Recommended
+- Smart (`gemini-flash-latest`)
 
 ### Browser Compatibility
 - Chrome/Edge (recommended)

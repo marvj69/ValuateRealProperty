@@ -206,7 +206,7 @@
 
     function getSelectedReportsModel() {
         const modelSelect = document.getElementById('modelSelect');
-        return modelSelect?.value?.trim() || 'gemini-3-flash-preview';
+        return modelSelect?.value?.trim() || 'gemini-flash-lite-latest';
     }
 
     function updateDownloadButtonState(enabled) {

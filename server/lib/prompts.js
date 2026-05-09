@@ -1,4 +1,4 @@
-export const DEFAULT_REPORT_MODEL = 'gemini-3-flash-preview';
+export const DEFAULT_REPORT_MODEL = 'gemini-flash-lite-latest';
 
 const STANDARD_TEMPLATE = `Overall Goal: Generate a comprehensive, data-driven real estate market report and reasoned valuation estimate for a specific property, acting as an expert analyst. Prioritize reliable web search for comparable data and perform meticulous self-checking before finalizing the output.
 
