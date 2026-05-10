@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v4.2';
+const CACHE_VERSION = 'v4.3';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
@@ -7,7 +7,7 @@ const PRECACHE_URLS = [
   './',
   './index.html',
   './styles.css',
-  './app.js?v=4.2',
+  './app.js?v=4.3',
   './tailwind-config.js',
   './manifest.json',
   './icons/icon-192.png',
@@ -15,6 +15,8 @@ const PRECACHE_URLS = [
   './icons/icon-192-maskable.png',
   './icons/icon-512-maskable.png',
   './icons/icon-180.png',
+  './icons/marketintel-mark.png',
+  './icons/marketintel-logo.png',
   './photo assets/906-Real-Estate-Group_Logo-2024_Black.png',
   './photo assets/CBlobo.png',
   OFFLINE_URL
