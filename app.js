@@ -23,7 +23,62 @@
         line: '#d8e2e8',
         muted: '#526371'
     });
+    const AUTH_GATE_COPY = Object.freeze({
+        login: {
+            eyebrow: 'Secure access',
+            title: 'Sign in to continue',
+            subtitle: 'Use your account to access valuation history and saved preferences.',
+            submitIcon: 'fa-right-to-bracket',
+            submitLabel: 'Sign in'
+        },
+        signup: {
+            eyebrow: 'New workspace',
+            title: 'Create your account',
+            subtitle: 'Start with a secure profile for saved reports and configuration.',
+            submitIcon: 'fa-user-plus',
+            submitLabel: 'Create account'
+        },
+        forgot: {
+            eyebrow: 'Password recovery',
+            title: 'Reset your password',
+            subtitle: 'Enter your account email and a reset link will be prepared.',
+            submitIcon: 'fa-paper-plane',
+            submitLabel: 'Send reset link'
+        },
+        reset: {
+            eyebrow: 'Set new password',
+            title: 'Choose a new password',
+            subtitle: 'Use your reset token to secure the account with a new password.',
+            submitIcon: 'fa-key',
+            submitLabel: 'Reset password'
+        }
+    });
 
+    const appShell = document.getElementById('appShell');
+    const authGate = document.getElementById('authGate');
+    const authGateForm = document.getElementById('authGateForm');
+    const authGateEyebrow = document.getElementById('authGateEyebrow');
+    const authGateTitle = document.getElementById('authGateTitle');
+    const authGateSubtitle = document.getElementById('authGateSubtitle');
+    const authGateTabs = document.getElementById('authGateTabs');
+    const authGateLoginTab = document.getElementById('authGateLoginTab');
+    const authGateSignupTab = document.getElementById('authGateSignupTab');
+    const authGateEmailGroup = document.getElementById('authGateEmailGroup');
+    const authGatePasswordGroup = document.getElementById('authGatePasswordGroup');
+    const authGateConfirmGroup = document.getElementById('authGateConfirmGroup');
+    const authGateTokenGroup = document.getElementById('authGateTokenGroup');
+    const authGateNewPasswordGroup = document.getElementById('authGateNewPasswordGroup');
+    const authGateEmail = document.getElementById('authGateEmail');
+    const authGatePassword = document.getElementById('authGatePassword');
+    const authGateConfirmPassword = document.getElementById('authGateConfirmPassword');
+    const authGateResetToken = document.getElementById('authGateResetToken');
+    const authGateNewPassword = document.getElementById('authGateNewPassword');
+    const authGateSubmit = document.getElementById('authGateSubmit');
+    const authGateForgotBtn = document.getElementById('authGateForgotBtn');
+    const authGateBackBtn = document.getElementById('authGateBackBtn');
+    const authGateMessage = document.getElementById('authGateMessage');
+    const authGateDevReset = document.getElementById('authGateDevReset');
+    const authGateDevResetLink = document.getElementById('authGateDevResetLink');
     const form = document.getElementById('reportForm');
     const generateBtn = document.getElementById('generateBtn');
     const progressSection = document.getElementById('progressSection');
@@ -60,6 +115,7 @@
     const authStatusBtn = document.getElementById('authStatusBtn');
     const authEmail = document.getElementById('authEmail');
     const authPassword = document.getElementById('authPassword');
+    const authCredentialFields = document.getElementById('authCredentialFields');
     const authLoginBtn = document.getElementById('authLoginBtn');
     const authSignupBtn = document.getElementById('authSignupBtn');
     const authLogoutBtn = document.getElementById('authLogoutBtn');
@@ -89,6 +145,7 @@
     let userSettingsChangedThisSession = false;
     let userSettingsSavePromise = Promise.resolve();
     let lastPersistedUserSettingsSignature = null;
+    let authGateMode = 'login';
 
     function safeStorageGet(key) {
         try {
@@ -388,6 +445,124 @@
             : `<i class="fas fa-bolt"></i><span>${label}</span>`;
     }
 
+    function toggleHidden(element, shouldHide) {
+        if (!element) return;
+        element.classList.toggle('hidden', shouldHide);
+    }
+
+    function setAuthGateMessage(message = '', type = 'info') {
+        if (!authGateMessage) return;
+        authGateMessage.textContent = message;
+        authGateMessage.classList.toggle('hidden', !message);
+        authGateMessage.classList.toggle('is-error', type === 'error');
+        authGateMessage.classList.toggle('is-success', type === 'success');
+    }
+
+    function clearAuthGateMessage() {
+        setAuthGateMessage('');
+    }
+
+    function setAuthGateDevReset(reset = null) {
+        const resetUrl = reset?.resetUrl || '';
+        toggleHidden(authGateDevReset, !resetUrl);
+        if (authGateDevResetLink) {
+            authGateDevResetLink.href = resetUrl || '#';
+        }
+    }
+
+    function setAuthGateBusy(isBusy) {
+        if (!authGateSubmit) return;
+        authGateSubmit.disabled = isBusy;
+        const copy = AUTH_GATE_COPY[authGateMode] || AUTH_GATE_COPY.login;
+        authGateSubmit.innerHTML = isBusy
+            ? '<i class="fas fa-spinner fa-spin"></i><span>Working...</span>'
+            : `<i class="fas ${copy.submitIcon}"></i><span>${copy.submitLabel}</span>`;
+    }
+
+    function setAuthGateMode(mode, options = {}) {
+        const nextMode = AUTH_GATE_COPY[mode] ? mode : 'login';
+        authGateMode = nextMode;
+        const copy = AUTH_GATE_COPY[nextMode];
+        const isLogin = nextMode === 'login';
+        const isSignup = nextMode === 'signup';
+        const isForgot = nextMode === 'forgot';
+        const isReset = nextMode === 'reset';
+
+        if (authGateEyebrow) authGateEyebrow.textContent = copy.eyebrow;
+        if (authGateTitle) authGateTitle.textContent = copy.title;
+        if (authGateSubtitle) authGateSubtitle.textContent = copy.subtitle;
+        toggleHidden(authGateTabs, isForgot || isReset);
+        toggleHidden(authGateEmailGroup, isReset);
+        toggleHidden(authGatePasswordGroup, isForgot || isReset);
+        toggleHidden(authGateConfirmGroup, !isSignup && !isReset);
+        toggleHidden(authGateTokenGroup, !isReset);
+        toggleHidden(authGateNewPasswordGroup, !isReset);
+        toggleHidden(authGateForgotBtn, !isLogin);
+        toggleHidden(authGateBackBtn, isLogin || isSignup);
+
+        authGateLoginTab?.classList.toggle('is-active', isLogin);
+        authGateLoginTab?.setAttribute('aria-selected', String(isLogin));
+        authGateSignupTab?.classList.toggle('is-active', isSignup);
+        authGateSignupTab?.setAttribute('aria-selected', String(isSignup));
+
+        if (authGatePassword) {
+            authGatePassword.autocomplete = isSignup ? 'new-password' : 'current-password';
+        }
+
+        setAuthGateBusy(false);
+        if (!options.preserveMessage) clearAuthGateMessage();
+        if (!options.keepDevReset) setAuthGateDevReset(null);
+    }
+
+    function getAuthGateFocusTarget() {
+        if (authGateMode === 'reset') return authGateResetToken;
+        return authGateEmail;
+    }
+
+    function showAuthGate() {
+        document.body.classList.remove('auth-loading');
+        document.body.classList.add('auth-required');
+        authGate?.classList.remove('hidden');
+        authGate?.setAttribute('aria-hidden', 'false');
+        appShell?.classList.add('app-shell--locked');
+        appShell?.setAttribute('aria-hidden', 'true');
+
+        settingsModal?.classList.remove('is-open');
+        settingsModal?.classList.add('hidden');
+        settingsModal?.setAttribute('aria-hidden', 'true');
+        settingsToggle?.setAttribute('aria-expanded', 'false');
+        historyDrawer?.classList.remove('is-open');
+        historyDrawer?.classList.add('hidden');
+        historyDrawer?.setAttribute('aria-hidden', 'true');
+        historyToggle?.setAttribute('aria-expanded', 'false');
+        updateScrollLock();
+        requestAnimationFrame(() => getAuthGateFocusTarget()?.focus());
+    }
+
+    function hideAuthGate() {
+        document.body.classList.remove('auth-loading');
+        document.body.classList.remove('auth-required');
+        authGate?.classList.add('hidden');
+        authGate?.setAttribute('aria-hidden', 'true');
+        appShell?.classList.remove('app-shell--locked');
+        appShell?.setAttribute('aria-hidden', 'false');
+        clearAuthGateMessage();
+        setAuthGateDevReset(null);
+        updateScrollLock();
+    }
+
+    function clearAuthSecrets() {
+        [
+            authPassword,
+            authGatePassword,
+            authGateConfirmPassword,
+            authGateResetToken,
+            authGateNewPassword
+        ].forEach((input) => {
+            if (input) input.value = '';
+        });
+    }
+
     function updateAuthUi() {
         const signedIn = Boolean(appState.user);
         const label = signedIn ? appState.user.email : 'Sign in';
@@ -405,6 +580,7 @@
             authStatusText.classList.toggle('text-emerald-700', signedIn);
             authStatusText.classList.toggle('text-slate-500', !signedIn);
         }
+        toggleHidden(authCredentialFields, signedIn);
         if (authLoginBtn) {
             authLoginBtn.classList.toggle('hidden', signedIn);
         }
@@ -417,6 +593,11 @@
         if (historyToggle) {
             historyToggle.disabled = !signedIn;
             historyToggle.classList.toggle('opacity-50', !signedIn);
+        }
+        if (signedIn) {
+            hideAuthGate();
+        } else {
+            showAuthGate();
         }
     }
 
@@ -435,13 +616,63 @@
         return appState.user;
     }
 
-    function getAuthCredentials(actionLabel) {
+    function getSettingsAuthCredentials(actionLabel) {
         const email = authEmail?.value?.trim();
         const password = authPassword?.value || '';
         if (!email || !password) {
             alert(`Enter your email and password to ${actionLabel}.`);
             return null;
         }
+        return { email, password };
+    }
+
+    function getAuthGatePayload() {
+        const email = authGateEmail?.value?.trim() || '';
+        const password = authGatePassword?.value || '';
+        const confirmPassword = authGateConfirmPassword?.value || '';
+        const resetToken = authGateResetToken?.value?.trim() || '';
+        const newPassword = authGateNewPassword?.value || '';
+
+        if (authGateMode === 'forgot') {
+            if (!email) {
+                setAuthGateMessage('Enter your email address to request a password reset.', 'error');
+                return null;
+            }
+            return { email };
+        }
+
+        if (authGateMode === 'reset') {
+            if (!resetToken || !newPassword || !confirmPassword) {
+                setAuthGateMessage('Enter the reset token and your new password twice.', 'error');
+                return null;
+            }
+            if (newPassword.length < 8) {
+                setAuthGateMessage('Use a password that is at least 8 characters.', 'error');
+                return null;
+            }
+            if (newPassword !== confirmPassword) {
+                setAuthGateMessage('The new passwords do not match.', 'error');
+                return null;
+            }
+            return { token: resetToken, password: newPassword };
+        }
+
+        if (!email || !password) {
+            setAuthGateMessage('Enter your email and password.', 'error');
+            return null;
+        }
+
+        if (authGateMode === 'signup') {
+            if (password.length < 8) {
+                setAuthGateMessage('Use a password that is at least 8 characters.', 'error');
+                return null;
+            }
+            if (password !== confirmPassword) {
+                setAuthGateMessage('The passwords do not match.', 'error');
+                return null;
+            }
+        }
+
         return { email, password };
     }
 
@@ -460,23 +691,39 @@
         }
     }
 
+    async function completeAuth(data) {
+        appState.user = data.user || null;
+        clearAuthSecrets();
+        updateAuthUi();
+        await syncUserSettingsAfterAuth(data.settings)
+            .catch((error) => console.warn('Failed to sync user settings.', error));
+        await refreshHistoryList();
+    }
+
+    async function signInWithCredentials(credentials) {
+        const data = await apiRequest('/api/auth/login', {
+            method: 'POST',
+            body: credentials
+        });
+        await completeAuth(data);
+    }
+
+    async function createAccountWithCredentials(credentials) {
+        const data = await apiRequest('/api/auth/signup', {
+            method: 'POST',
+            body: credentials
+        });
+        await completeAuth(data);
+    }
+
     async function login() {
-        const credentials = getAuthCredentials('sign in');
+        const credentials = getSettingsAuthCredentials('sign in');
         if (!credentials) return;
 
         setAuthBusy(true, 'login');
-
         try {
-            const data = await apiRequest('/api/auth/login', {
-                method: 'POST',
-                body: credentials
-            });
-            appState.user = data.user || null;
-            if (authPassword) authPassword.value = '';
-            updateAuthUi();
-            await syncUserSettingsAfterAuth(data.settings)
-                .catch((error) => console.warn('Failed to sync user settings.', error));
-            await refreshHistoryList();
+            await signInWithCredentials(credentials);
+            closeSettingsModal();
         } catch (error) {
             alert(error.message || 'Sign in failed.');
         } finally {
@@ -485,7 +732,7 @@
     }
 
     async function signup() {
-        const credentials = getAuthCredentials('create an account');
+        const credentials = getSettingsAuthCredentials('create an account');
         if (!credentials) return;
         if (credentials.password.length < 8) {
             alert('Use a password that is at least 8 characters.');
@@ -493,23 +740,80 @@
         }
 
         setAuthBusy(true, 'signup');
-
         try {
-            const data = await apiRequest('/api/auth/signup', {
-                method: 'POST',
-                body: credentials
-            });
-            appState.user = data.user || null;
-            if (authPassword) authPassword.value = '';
-            updateAuthUi();
-            await syncUserSettingsAfterAuth(data.settings)
-                .catch((error) => console.warn('Failed to sync user settings.', error));
-            await refreshHistoryList();
+            await createAccountWithCredentials(credentials);
+            closeSettingsModal();
         } catch (error) {
             alert(error.message || 'Account creation failed.');
         } finally {
             setAuthBusy(false);
         }
+    }
+
+    async function requestPasswordReset(email) {
+        const data = await apiRequest('/api/auth/password-reset/request', {
+            method: 'POST',
+            body: { email }
+        });
+
+        if (data.reset?.token) {
+            if (authGateResetToken) authGateResetToken.value = data.reset.token;
+            setAuthGateMode('reset', { preserveMessage: true });
+            setAuthGateMessage('Development reset token is ready. Enter a new password to finish.', 'success');
+            setAuthGateDevReset(data.reset);
+            return;
+        }
+
+        setAuthGateMessage(data.message || 'If an account exists for that email, a password reset link will be sent.', 'success');
+    }
+
+    async function confirmPasswordReset(payload) {
+        const data = await apiRequest('/api/auth/password-reset/confirm', {
+            method: 'POST',
+            body: payload
+        });
+        await completeAuth(data);
+        clearPasswordResetUrl();
+    }
+
+    async function handleAuthGateSubmit(event) {
+        event.preventDefault();
+        const payload = getAuthGatePayload();
+        if (!payload) return;
+
+        setAuthGateBusy(true);
+        clearAuthGateMessage();
+        try {
+            if (authGateMode === 'login') {
+                await signInWithCredentials(payload);
+            } else if (authGateMode === 'signup') {
+                await createAccountWithCredentials(payload);
+            } else if (authGateMode === 'forgot') {
+                await requestPasswordReset(payload.email);
+            } else if (authGateMode === 'reset') {
+                await confirmPasswordReset(payload);
+            }
+        } catch (error) {
+            setAuthGateMessage(error.message || 'Authentication failed. Please try again.', 'error');
+        } finally {
+            setAuthGateBusy(false);
+        }
+    }
+
+    function hydratePasswordResetFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('reset_token');
+        if (!token) return;
+        if (authGateResetToken) authGateResetToken.value = token;
+        setAuthGateMode('reset', { preserveMessage: true });
+        setAuthGateMessage('Choose a new password to finish resetting your account.', 'success');
+    }
+
+    function clearPasswordResetUrl() {
+        const url = new URL(window.location.href);
+        if (!url.searchParams.has('reset_token')) return;
+        url.searchParams.delete('reset_token');
+        window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
     }
 
     async function logout() {
@@ -529,6 +833,7 @@
         }
         safeStorageRemove(ACTIVE_REPORT_STORAGE_KEY);
         stopPolling();
+        setAuthGateMode('login');
         updateAuthUi();
         renderHistoryList([]);
         updateHistoryBadge(0);
@@ -537,8 +842,9 @@
 
     function requireSignedIn() {
         if (appState.user) return true;
-        openSettingsModal();
-        alert('Please sign in before starting or viewing reports.');
+        setAuthGateMode('login', { preserveMessage: true });
+        setAuthGateMessage('Please sign in before starting or viewing reports.', 'error');
+        showAuthGate();
         return false;
     }
 
@@ -1645,6 +1951,11 @@
         });
 
         form?.addEventListener('submit', startReport);
+        authGateForm?.addEventListener('submit', handleAuthGateSubmit);
+        authGateLoginTab?.addEventListener('click', () => setAuthGateMode('login'));
+        authGateSignupTab?.addEventListener('click', () => setAuthGateMode('signup'));
+        authGateForgotBtn?.addEventListener('click', () => setAuthGateMode('forgot'));
+        authGateBackBtn?.addEventListener('click', () => setAuthGateMode('login'));
         downloadPdfBtn?.addEventListener('click', saveFinalReportAsPDF);
         settingsToggle?.addEventListener('click', openSettingsModal);
         authStatusBtn?.addEventListener('click', openSettingsModal);
@@ -1728,6 +2039,7 @@
     async function boot() {
         updateDownloadButtonState(false);
         setNewValuationVisibility(false);
+        hydratePasswordResetFromUrl();
         applyStoredUserSettings();
         wireEvents();
         await loadCurrentUser();

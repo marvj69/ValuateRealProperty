@@ -5,6 +5,7 @@ import { HttpError } from './http.js';
 
 const COOKIE_NAME = 'valuate_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+const PASSWORD_RESET_DEFAULT_TTL_MINUTES = 30;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 256;
 const PASSWORD_KEY_LENGTH = 64;
@@ -76,6 +77,68 @@ function shouldUseSecureCookie(req) {
     req.headers['x-forwarded-proto'] === 'https' ||
     Boolean(process.env.VERCEL)
   );
+}
+
+function firstHeaderValue(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function getPasswordResetTtlMs() {
+  const minutes = Number.parseInt(
+    process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES || String(PASSWORD_RESET_DEFAULT_TTL_MINUTES),
+    10
+  );
+  const safeMinutes = Number.isFinite(minutes) && minutes > 0
+    ? minutes
+    : PASSWORD_RESET_DEFAULT_TTL_MINUTES;
+  return safeMinutes * 60 * 1000;
+}
+
+function hashResetToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function normalizeResetToken(token) {
+  const normalized = String(token || '').trim();
+  if (normalized.length < 24) {
+    throw new HttpError(400, 'A valid password reset token is required.');
+  }
+  if (normalized.length > 512) {
+    throw new HttpError(400, 'Password reset token is too long.');
+  }
+  return normalized;
+}
+
+function getRequestOrigin(req) {
+  const configuredOrigin = process.env.APP_BASE_URL || process.env.PUBLIC_APP_URL;
+  if (configuredOrigin) return configuredOrigin.replace(/\/+$/, '');
+
+  if (process.env.VERCEL_URL) {
+    const vercelUrl = process.env.VERCEL_URL.replace(/\/+$/, '');
+    return vercelUrl.startsWith('http') ? vercelUrl : `https://${vercelUrl}`;
+  }
+
+  const host = firstHeaderValue(req.headers['x-forwarded-host']) || firstHeaderValue(req.headers.host);
+  if (!host) return '';
+  const protocol = firstHeaderValue(req.headers['x-forwarded-proto'])
+    || (shouldUseSecureCookie(req) ? 'https' : 'http');
+  return `${protocol}://${host}`;
+}
+
+export function shouldExposePasswordResetToken() {
+  if (process.env.VERCEL_ENV === 'production') {
+    return false;
+  }
+  return process.env.PASSWORD_RESET_DEV_MODE === 'true'
+    || (!process.env.VERCEL && process.env.NODE_ENV !== 'production');
+}
+
+export function buildPasswordResetUrl(req, token) {
+  const origin = getRequestOrigin(req);
+  if (!origin) return '';
+  const url = new URL(origin);
+  url.searchParams.set('reset_token', token);
+  return url.toString();
 }
 
 export function normalizeEmail(email) {
@@ -183,6 +246,106 @@ export async function authenticateUser(email, password) {
   if (!verified) {
     throw new HttpError(401, 'Invalid email or password.');
   }
+
+  return {
+    userId: user.id,
+    email: user.email
+  };
+}
+
+export async function createPasswordResetToken(email) {
+  const normalizedEmail = normalizeEmail(email);
+
+  await ensureSchema();
+
+  const { rows } = await sql`
+    SELECT id, email
+    FROM app_users
+    WHERE email = ${normalizedEmail}
+    LIMIT 1
+  `;
+
+  const user = rows[0] || null;
+  if (!user) {
+    return {
+      accepted: true,
+      user: null,
+      token: null,
+      expiresAt: null
+    };
+  }
+
+  const token = crypto.randomBytes(32).toString('base64url');
+  const tokenHash = hashResetToken(token);
+  const expiresAt = new Date(Date.now() + getPasswordResetTtlMs());
+  const tokenId = crypto.randomUUID();
+
+  await sql`
+    DELETE FROM password_reset_tokens
+    WHERE user_id = ${user.id}
+      AND (used_at IS NOT NULL OR expires_at <= now())
+  `;
+
+  await sql`
+    UPDATE password_reset_tokens
+    SET used_at = now()
+    WHERE user_id = ${user.id}
+      AND used_at IS NULL
+  `;
+
+  await sql`
+    INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
+    VALUES (${tokenId}, ${user.id}, ${tokenHash}, ${expiresAt.toISOString()})
+  `;
+
+  return {
+    accepted: true,
+    user: {
+      userId: user.id,
+      email: user.email
+    },
+    token,
+    expiresAt: expiresAt.toISOString()
+  };
+}
+
+export async function resetPasswordWithToken(token, password) {
+  const normalizedToken = normalizeResetToken(token);
+  const normalizedPassword = normalizePassword(password);
+  const passwordHash = await hashPassword(normalizedPassword);
+  const tokenHash = hashResetToken(normalizedToken);
+
+  await ensureSchema();
+
+  const { rows } = await sql`
+    UPDATE password_reset_tokens AS reset_token
+    SET used_at = now()
+    FROM app_users AS app_user
+    WHERE reset_token.user_id = app_user.id
+      AND reset_token.token_hash = ${tokenHash}
+      AND reset_token.used_at IS NULL
+      AND reset_token.expires_at > now()
+    RETURNING app_user.id AS id, app_user.email AS email
+  `;
+
+  const user = rows[0] || null;
+  if (!user) {
+    throw new HttpError(400, 'Password reset link is invalid or expired.');
+  }
+
+  await sql`
+    UPDATE app_users
+    SET password_hash = ${passwordHash},
+        updated_at = now()
+    WHERE id = ${user.id}
+  `;
+
+  await sql`
+    UPDATE password_reset_tokens
+    SET used_at = now()
+    WHERE user_id = ${user.id}
+      AND used_at IS NULL
+  `;
 
   return {
     userId: user.id,

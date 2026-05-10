@@ -20,7 +20,113 @@
     <script src="tailwind-config.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="text-slate-700 antialiased min-h-screen pb-24">
+<body class="text-slate-700 antialiased min-h-screen pb-24 auth-loading">
+
+    <!-- First-use Authentication -->
+    <section id="authGate" class="auth-gate hidden" aria-hidden="true">
+        <div class="auth-shell">
+            <div class="auth-brand-panel">
+                <div class="auth-brand-lockup">
+                    <div class="auth-brand-mark">
+                        <i class="fas fa-building"></i>
+                    </div>
+                    <div>
+                        <p class="auth-brand-kicker">MarketIntel</p>
+                        <h1>Market Intelligence Studio</h1>
+                    </div>
+                </div>
+                <p class="auth-brand-copy">A secure workspace for valuation reports, saved research, and account-level report preferences.</p>
+                <div class="auth-brand-grid" aria-label="Workspace safeguards">
+                    <div>
+                        <i class="fas fa-lock"></i>
+                        <span>Private sessions</span>
+                    </div>
+                    <div>
+                        <i class="fas fa-clock-rotate-left"></i>
+                        <span>Saved valuations</span>
+                    </div>
+                    <div>
+                        <i class="fas fa-shield-halved"></i>
+                        <span>Backend processing</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="auth-card" role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
+                <div class="auth-card-header">
+                    <p id="authGateEyebrow" class="auth-card-eyebrow">Secure access</p>
+                    <h2 id="authGateTitle">Sign in to continue</h2>
+                    <p id="authGateSubtitle">Use your account to access valuation history and saved preferences.</p>
+                </div>
+
+                <div id="authGateTabs" class="auth-tabs" role="tablist" aria-label="Authentication mode">
+                    <button id="authGateLoginTab" type="button" class="auth-tab is-active" data-auth-mode="login" role="tab" aria-selected="true">Sign in</button>
+                    <button id="authGateSignupTab" type="button" class="auth-tab" data-auth-mode="signup" role="tab" aria-selected="false">Create account</button>
+                </div>
+
+                <form id="authGateForm" class="auth-form" novalidate>
+                    <div id="authGateEmailGroup" class="auth-field">
+                        <label for="authGateEmail">Email</label>
+                        <div class="auth-input-wrap">
+                            <i class="fas fa-envelope"></i>
+                            <input id="authGateEmail" type="email" placeholder="you@example.com" autocomplete="email">
+                        </div>
+                    </div>
+
+                    <div id="authGatePasswordGroup" class="auth-field">
+                        <label for="authGatePassword">Password</label>
+                        <div class="auth-input-wrap">
+                            <i class="fas fa-lock"></i>
+                            <input id="authGatePassword" type="password" placeholder="Password" autocomplete="current-password" minlength="8">
+                        </div>
+                    </div>
+
+                    <div id="authGateConfirmGroup" class="auth-field hidden">
+                        <label for="authGateConfirmPassword">Confirm password</label>
+                        <div class="auth-input-wrap">
+                            <i class="fas fa-check"></i>
+                            <input id="authGateConfirmPassword" type="password" placeholder="Confirm password" autocomplete="new-password" minlength="8">
+                        </div>
+                    </div>
+
+                    <div id="authGateTokenGroup" class="auth-field hidden">
+                        <label for="authGateResetToken">Reset token</label>
+                        <div class="auth-input-wrap">
+                            <i class="fas fa-key"></i>
+                            <input id="authGateResetToken" type="text" placeholder="Paste reset token" autocomplete="one-time-code">
+                        </div>
+                    </div>
+
+                    <div id="authGateNewPasswordGroup" class="auth-field hidden">
+                        <label for="authGateNewPassword">New password</label>
+                        <div class="auth-input-wrap">
+                            <i class="fas fa-lock-open"></i>
+                            <input id="authGateNewPassword" type="password" placeholder="New password" autocomplete="new-password" minlength="8">
+                        </div>
+                    </div>
+
+                    <div id="authGateMessage" class="auth-message hidden" aria-live="polite"></div>
+
+                    <button id="authGateSubmit" type="submit" class="auth-submit">
+                        <i class="fas fa-right-to-bracket"></i>
+                        <span>Sign in</span>
+                    </button>
+
+                    <div class="auth-links">
+                        <button id="authGateForgotBtn" type="button">Forgot password?</button>
+                        <button id="authGateBackBtn" type="button" class="hidden">Back to sign in</button>
+                    </div>
+
+                    <div id="authGateDevReset" class="auth-dev-reset hidden">
+                        <p>Development reset token ready.</p>
+                        <a id="authGateDevResetLink" href="#">Open reset link</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <div id="appShell" class="app-shell app-shell--locked" aria-hidden="true">
 
     <!-- Top Navigation -->
     <nav class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
@@ -152,7 +258,7 @@
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-slate-700 mb-2">Account</label>
                         <p id="authStatusText" class="text-sm text-slate-500 mb-3">Sign in or create an account to save reports across devices.</p>
-                        <div class="grid gap-3 md:grid-cols-2">
+                        <div id="authCredentialFields" class="grid gap-3 md:grid-cols-2">
                             <div class="input-group !mb-0">
                                 <i class="fas fa-envelope input-icon"></i>
                                 <input type="email" id="authEmail" class="custom-input" placeholder="you@example.com" autocomplete="email">
@@ -301,7 +407,8 @@
             <div id="historyEmpty" class="history-empty hidden">No saved valuations yet.</div>
         </aside>
     </div>
+    </div>
 
-    <script src="app.js?v=3.4"></script>
+    <script src="app.js?v=3.5"></script>
 </body>
 </html>

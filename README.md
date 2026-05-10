@@ -41,6 +41,7 @@ Choose between two analysis approaches:
 - Vercel Postgres / Neon connection environment variables
 - An `AUTH_SESSION_SECRET` for the built-in signed-cookie auth flow
 - Users create email/password accounts that are stored in Postgres
+- Optional password reset configuration: `APP_BASE_URL`, `PASSWORD_RESET_DEV_MODE`, and `PASSWORD_RESET_TOKEN_TTL_MINUTES`
 
 ### Installation
 
@@ -71,10 +72,11 @@ Choose between two analysis approaches:
 
 ### First-Time Setup
 
-1. Click **Sign in** or the settings icon in the top navigation
+1. Open the app and use the first-use login screen
 2. Enter your email and password, then choose **Create account**
 3. Select your preferred AI model and report settings
 4. Return later with **Sign in** using the same email and password
+5. Use **Forgot password?** to request a one-time reset token during local development
 
 ## How to Use
 
@@ -122,6 +124,8 @@ Choose between two analysis approaches:
 ### API Routes
 - `POST /api/auth/signup` - create an email/password account and signed HttpOnly session cookie
 - `POST /api/auth/login` - verify an email/password account and create a signed HttpOnly session cookie
+- `POST /api/auth/password-reset/request` - create a one-time password reset token and return a development reset link when enabled
+- `POST /api/auth/password-reset/confirm` - reset the password with a valid token and sign in the user
 - `POST /api/auth/logout` - clear the session
 - `GET /api/auth/me` - inspect current auth state
 - `GET|PATCH /api/user/settings` - read or update the signed-in user's report preferences
@@ -137,7 +141,12 @@ Choose between two analysis approaches:
 - `AUTH_SESSION_SECRET`: long random string used to sign sessions
 - `CRON_SECRET`: bearer token for the scheduled worker endpoint
 - `REPORT_MODEL`: optional default Gemini model
+- `APP_BASE_URL`: optional absolute app URL used to build password reset links
+- `PASSWORD_RESET_DEV_MODE`: optional local-development switch that returns reset tokens in the API response
+- `PASSWORD_RESET_TOKEN_TTL_MINUTES`: optional reset-token expiration window, default `30`
 - Vercel Postgres / Neon variables such as `POSTGRES_URL` or the integration-provided equivalents
+
+Password reset tokens are stored hashed in Postgres and are single-use. In production, connect the request endpoint to an email provider and keep `PASSWORD_RESET_DEV_MODE` unset so raw reset tokens are not returned to the browser.
 
 Note: attachments are submitted directly to the report creation API and are limited to small PDFs/images. For large documents, add Vercel Blob or another object store and persist file URLs in the report inputs.
 
