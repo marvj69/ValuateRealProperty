@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v3.3';
+const CACHE_VERSION = 'v3.4';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
@@ -7,7 +7,7 @@ const PRECACHE_URLS = [
   './',
   './index.html',
   './styles.css',
-  './app.js?v=3.3',
+  './app.js?v=3.4',
   './tailwind-config.js',
   './manifest.json',
   './icons/icon-192.png',
@@ -51,6 +51,18 @@ function cacheFirst(request) {
   });
 }
 
+function shouldUseNetworkFirst(url, request) {
+  return (
+    request.mode === 'navigate' ||
+    ['script', 'style', 'worker'].includes(request.destination) ||
+    url.pathname === '/' ||
+    url.pathname.endsWith('.html') ||
+    url.pathname.endsWith('.js') ||
+    url.pathname.endsWith('.css') ||
+    url.pathname.endsWith('/manifest.json')
+  );
+}
+
 function networkFirst(request) {
   return fetch(request).then((response) => {
     const copy = response.clone();
@@ -82,7 +94,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.origin === self.location.origin) {
-    if (request.mode === 'navigate') {
+    if (shouldUseNetworkFirst(url, request)) {
       event.respondWith(
         networkFirst(request).then((response) => response || caches.match(OFFLINE_URL))
       );

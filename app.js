@@ -87,6 +87,8 @@
     let userSettingsRevision = 0;
     let userSettingsSaveTimer = null;
     let userSettingsChangedThisSession = false;
+    let userSettingsSavePromise = Promise.resolve();
+    let lastPersistedUserSettingsSignature = null;
 
     function safeStorageGet(key) {
         try {
@@ -142,6 +144,10 @@
         }, {});
     }
 
+    function getUserSettingsSignature(settings = getCurrentUserSettings()) {
+        return JSON.stringify(settings);
+    }
+
     function cacheUserSettings(settings = getCurrentUserSettings()) {
         safeStorageSet(USER_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
         return settings;
@@ -164,19 +170,43 @@
         applyUserSettings(getStoredUserSettings());
     }
 
-    async function persistUserSettings(settings = getCurrentUserSettings(), revision = userSettingsRevision) {
+    function shouldPersistUserSettings(settings = getCurrentUserSettings()) {
+        return Boolean(appState.user) && getUserSettingsSignature(settings) !== lastPersistedUserSettingsSignature;
+    }
+
+    async function persistUserSettings(settings = getCurrentUserSettings(), revision = userSettingsRevision, options = {}) {
         if (!appState.user) return settings;
         const data = await apiRequest('/api/user/settings', {
             method: 'PATCH',
-            body: { settings }
+            body: { settings },
+            keepalive: options.keepalive === true
         });
         const savedSettings = data.settings || settings;
         if (revision === userSettingsRevision) {
             applyUserSettings(savedSettings);
             cacheUserSettings(getCurrentUserSettings());
+            lastPersistedUserSettingsSignature = getUserSettingsSignature(getCurrentUserSettings());
             userSettingsChangedThisSession = false;
         }
         return savedSettings;
+    }
+
+    function flushUserSettings(options = {}) {
+        if (userSettingsSaveTimer) {
+            window.clearTimeout(userSettingsSaveTimer);
+            userSettingsSaveTimer = null;
+        }
+
+        const settings = cacheUserSettings(getCurrentUserSettings());
+        if (!shouldPersistUserSettings(settings)) {
+            return Promise.resolve(settings);
+        }
+
+        const revision = userSettingsRevision;
+        userSettingsSavePromise = userSettingsSavePromise
+            .catch(() => {})
+            .then(() => persistUserSettings(settings, revision, options));
+        return userSettingsSavePromise;
     }
 
     function saveUserSettings(options = {}) {
@@ -185,26 +215,23 @@
         const settings = cacheUserSettings(getCurrentUserSettings());
         userSettingsChangedThisSession = true;
         userSettingsRevision += 1;
-        const revision = userSettingsRevision;
 
         if (!syncRemote || !appState.user) {
             return Promise.resolve(settings);
         }
 
+        if (immediate) {
+            return flushUserSettings();
+        }
+
         if (userSettingsSaveTimer) {
             window.clearTimeout(userSettingsSaveTimer);
-            userSettingsSaveTimer = null;
         }
-
-        if (immediate) {
-            return persistUserSettings(settings, revision);
-        }
-
         userSettingsSaveTimer = window.setTimeout(() => {
             userSettingsSaveTimer = null;
-            persistUserSettings(getCurrentUserSettings(), userSettingsRevision)
+            flushUserSettings()
                 .catch((error) => console.warn('Failed to save user settings.', error));
-        }, 400);
+        }, 150);
 
         return Promise.resolve(settings);
     }
@@ -217,7 +244,7 @@
                 window.clearTimeout(userSettingsSaveTimer);
                 userSettingsSaveTimer = null;
             }
-            await persistUserSettings(getCurrentUserSettings(), userSettingsRevision);
+            await flushUserSettings();
             return;
         }
 
@@ -229,12 +256,14 @@
         if (settings) {
             applyUserSettings(settings);
             cacheUserSettings(getCurrentUserSettings());
+            lastPersistedUserSettingsSignature = getUserSettingsSignature(getCurrentUserSettings());
+            userSettingsChangedThisSession = false;
         }
     }
 
     function wireUserSettingsPersistence() {
         Object.values(USER_SETTINGS_FIELDS).forEach((field) => {
-            document.getElementById(field.elementId)?.addEventListener('change', saveUserSettings);
+            document.getElementById(field.elementId)?.addEventListener('change', () => saveUserSettings());
         });
     }
 
@@ -493,6 +522,7 @@
         appState.history = [];
         appState.activeReportId = null;
         userSettingsChangedThisSession = false;
+        lastPersistedUserSettingsSignature = null;
         if (userSettingsSaveTimer) {
             window.clearTimeout(userSettingsSaveTimer);
             userSettingsSaveTimer = null;
@@ -838,6 +868,8 @@
     async function startReport(event) {
         event.preventDefault();
         if (!requireSignedIn()) return;
+        await flushUserSettings()
+            .catch((error) => console.warn('Failed to save user settings.', error));
 
         const propertyAddress = document.getElementById('propertyAddress')?.value.trim() || '';
         const additionalDetails = document.getElementById('additionalDetails')?.value.trim() || '';
@@ -1550,6 +1582,8 @@
 
     function closeSettingsModal() {
         if (!settingsModal) return;
+        flushUserSettings({ keepalive: true })
+            .catch((error) => console.warn('Failed to save user settings.', error));
         settingsModal.classList.remove('is-open');
         settingsModal.setAttribute('aria-hidden', 'true');
         settingsToggle?.setAttribute('aria-expanded', 'false');
@@ -1677,6 +1711,16 @@
         window.addEventListener('focus', () => {
             if (appState.activeReportId && appState.user) {
                 loadReport(appState.activeReportId);
+            }
+        });
+        window.addEventListener('pagehide', () => {
+            flushUserSettings({ keepalive: true })
+                .catch((error) => console.warn('Failed to save user settings.', error));
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                flushUserSettings({ keepalive: true })
+                    .catch((error) => console.warn('Failed to save user settings.', error));
             }
         });
     }
