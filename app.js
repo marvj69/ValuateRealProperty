@@ -41,7 +41,7 @@
         forgot: {
             eyebrow: 'Password recovery',
             title: 'Reset your password',
-            subtitle: 'Enter your account email and a reset link will be prepared.',
+            subtitle: 'Enter your account email and we will send a secure reset link.',
             submitIcon: 'fa-paper-plane',
             submitLabel: 'Send reset link'
         },

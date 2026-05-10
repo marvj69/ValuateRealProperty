@@ -40,8 +40,9 @@ Choose between two analysis approaches:
 - A Google Gemini API key configured as a server environment variable
 - Vercel Postgres / Neon connection environment variables
 - An `AUTH_SESSION_SECRET` for the built-in signed-cookie auth flow
+- A Resend API key and verified sender address for production password recovery emails
 - Users create email/password accounts that are stored in Postgres
-- Optional password reset configuration: `APP_BASE_URL`, `PASSWORD_RESET_DEV_MODE`, and `PASSWORD_RESET_TOKEN_TTL_MINUTES`
+- Optional password reset configuration: `APP_BASE_URL`, `PASSWORD_RESET_DEV_MODE`, `PASSWORD_RESET_TOKEN_TTL_MINUTES`, and `PASSWORD_RESET_EMAIL_REPLY_TO`
 
 ### Installation
 
@@ -144,9 +145,12 @@ Choose between two analysis approaches:
 - `APP_BASE_URL`: optional absolute app URL used to build password reset links
 - `PASSWORD_RESET_DEV_MODE`: optional local-development switch that returns reset tokens in the API response
 - `PASSWORD_RESET_TOKEN_TTL_MINUTES`: optional reset-token expiration window, default `30`
+- `RESEND_API_KEY`: server-side Resend API key used to send password reset emails
+- `PASSWORD_RESET_EMAIL_FROM`: verified sender, for example `MarketIntel <password-reset@yourdomain.com>`
+- `PASSWORD_RESET_EMAIL_REPLY_TO`: optional reply-to address for reset emails
 - Vercel Postgres / Neon variables such as `POSTGRES_URL` or the integration-provided equivalents
 
-Password reset tokens are stored hashed in Postgres and are single-use. In production, connect the request endpoint to an email provider and keep `PASSWORD_RESET_DEV_MODE` unset so raw reset tokens are not returned to the browser.
+Password reset tokens are stored hashed in Postgres and are single-use. In production, set `RESEND_API_KEY`, `PASSWORD_RESET_EMAIL_FROM`, and `APP_BASE_URL`, and keep `PASSWORD_RESET_DEV_MODE` unset so raw reset tokens are not returned to the browser.
 
 Note: attachments are submitted directly to the report creation API and are limited to small PDFs/images. For large documents, add Vercel Blob or another object store and persist file URLs in the report inputs.
 
