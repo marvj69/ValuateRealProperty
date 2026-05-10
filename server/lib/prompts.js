@@ -167,12 +167,17 @@ Client-facing requirements:
 - If verified comparable evidence is unavailable or contains internal error/process text, do not repeat that wording. Instead, state the limitation professionally in the Risks, Assumptions & Limitations section.
 
 Evidence handling:
+- Treat the internal research materials as a complete evidence package. Review every provided report section before drafting and incorporate the strongest unique facts, recurring conclusions, market observations, comparable discussions, risks, and pricing arguments from across the full set.
+- Produce one large, in-depth report rather than a condensed summary. Each major section should include substantive analysis, not just bullets or short recap language.
+- Use the validated comparable table to anchor the valuation, but also use the broader research materials for subject-property detail, market context, buyer/seller strategy, qualitative adjustments, risk discussion, and support for the final conclusion.
+- Synthesize corroborated points that appear across multiple reports, and include minority or conflicting findings when they materially affect value, confidence, marketability, or pricing strategy.
 - Use verified comparable sales and listings as the strongest evidence when actual verified data is provided.
 - When facts conflict, favor verified public records, MLS/listing data, county records, and consistently cited facts over unsupported statements.
 - Give greatest valuation weight to closed sales that are recent, nearby, similar in property type, similar in size/condition, and well-supported.
 - Use active and pending listings as market-positioning evidence, not as the primary basis for market value.
 - Exclude or down-weight weak comparables and explain the reason in polished client language.
 - Do not simply average prior value conclusions. Build the final value opinion from the strongest available comparable evidence and market context.
+- The final deliverable should read like a comprehensive valuation narrative. Do not describe the number of internal reports reviewed or the workflow used to create it.
 
 Required output format:
 # Final Real Estate Valuation Report
@@ -182,22 +187,22 @@ Include these exact labels so downstream systems can read the valuation:
 - Estimated Market Value Range: $XXX,XXX - $YYY,YYY
 - Single Point Estimate: $XXX,XXX
 - Confidence Level: Low/Medium/High
-Then provide a concise 3-5 sentence client-facing valuation verdict.
+Then provide a substantial client-facing valuation verdict that explains the value conclusion, primary evidence, market positioning, and confidence level.
 
 ## Subject Property Overview
-Summarize the property facts, market position, strengths, and buyer objections. Clearly identify unknowns as assumptions rather than presenting them as facts.
+Summarize the property facts, market position, strengths, buyer objections, condition/utility factors, location influences, and any notable details repeated across the evidence. Clearly identify unknowns as assumptions rather than presenting them as facts.
 
 ## Market Context
-Summarize relevant macro and local market conditions. Keep this section practical and connected to pricing, demand, liquidity, and negotiation leverage.
+Summarize relevant macro and local market conditions with enough depth to explain pricing, demand, liquidity, buyer behavior, inventory pressure, and negotiation leverage. Include corroborated market signals from the research materials when they are supportable.
 
 ## Comparable Sales Analysis
-Provide a deduplicated table with Address, Sale Date, Sale Price, SqFt, Price/SqFt, Distance, Verification/Source, and Adjustment Notes.
+Provide a deduplicated table with Address, Sale Date, Sale Price, SqFt, Price/SqFt, Distance, and Adjustment Notes. After the table, provide detailed narrative analysis of the best comps, weaker comps, adjustment logic, and how the sales bracket the subject's value.
 
 ## Active & Pending Competition
-Provide a deduplicated table with Address, Status, List/Pending Price, Key Facts, Verification/Source, and Relevance.
+Provide a deduplicated table with Address, Status, List/Pending Price, Key Facts, and Relevance. After the table, explain how the current competition affects list-price positioning, buyer comparison behavior, and expected negotiation pressure.
 
 ## Valuation Rationale
-Explain how the best evidence supports the value range and single point estimate. Discuss adjustments, comp weighting, and how active competition affects pricing strategy.
+Explain how the best evidence supports the value range and single point estimate. Discuss adjustments, comp weighting, price-per-square-foot context, condition/feature differences, market trajectory, and how active competition affects pricing strategy.
 
 ## Pricing Strategy & Client Guidance
 Give practical guidance tailored to the intended audience. For sellers, include conservative, market, and aspirational pricing posture when supportable. For buyers or investors, include offer-positioning and risk guidance.
