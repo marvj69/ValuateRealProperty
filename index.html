@@ -2,27 +2,31 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
     <title>Market Intelligence Studio</title>
     <meta name="description" content="Generate comprehensive property valuation reports through a secure backend workflow.">
     <meta name="theme-color" content="#002068">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icons/icon-192.png" sizes="192x192">
     <link rel="apple-touch-icon" href="icons/icon-180.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="tailwind-config.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="text-slate-700 antialiased min-h-screen pb-24 auth-loading">
+<body class="auth-loading">
 
-    <!-- First-use Authentication -->
+    <!-- ================================================
+         Auth gate (sign in / sign up / forgot / reset)
+         ================================================ -->
     <section id="authGate" class="auth-gate hidden" aria-hidden="true">
         <div class="auth-shell">
             <div class="auth-brand-panel">
@@ -35,28 +39,28 @@
                         <h1>Market Intelligence Studio</h1>
                     </div>
                 </div>
-                <p class="auth-brand-copy">A secure workspace for valuation reports, saved research, and account-level report preferences.</p>
+                <p class="auth-brand-copy">Your secure workspace for valuation reports, saved research, and account-level preferences — built for the way you work in the field.</p>
                 <div class="auth-brand-grid" aria-label="Workspace safeguards">
                     <div>
                         <i class="fas fa-lock"></i>
-                        <span>Private sessions</span>
+                        <span>Private<br>sessions</span>
                     </div>
                     <div>
                         <i class="fas fa-clock-rotate-left"></i>
-                        <span>Saved valuations</span>
+                        <span>Saved<br>valuations</span>
                     </div>
                     <div>
                         <i class="fas fa-shield-halved"></i>
-                        <span>Backend processing</span>
+                        <span>Secure<br>processing</span>
                     </div>
                 </div>
             </div>
 
             <div class="auth-card" role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
                 <div class="auth-card-header">
-                    <p id="authGateEyebrow" class="auth-card-eyebrow">Secure access</p>
+                    <p id="authGateEyebrow" class="auth-card-eyebrow">Welcome back</p>
                     <h2 id="authGateTitle">Sign in to continue</h2>
-                    <p id="authGateSubtitle">Use your account to access valuation history and saved preferences.</p>
+                    <p id="authGateSubtitle">Access valuation history and saved preferences across devices.</p>
                 </div>
 
                 <div id="authGateTabs" class="auth-tabs" role="tablist" aria-label="Authentication mode">
@@ -69,7 +73,7 @@
                         <label for="authGateEmail">Email</label>
                         <div class="auth-input-wrap">
                             <i class="fas fa-envelope"></i>
-                            <input id="authGateEmail" type="email" placeholder="you@example.com" autocomplete="email">
+                            <input id="authGateEmail" type="email" placeholder="you@example.com" autocomplete="email" inputmode="email">
                         </div>
                     </div>
 
@@ -126,289 +130,306 @@
         </div>
     </section>
 
+    <!-- ================================================
+         Main app shell
+         ================================================ -->
     <div id="appShell" class="app-shell app-shell--locked" aria-hidden="true">
 
-    <!-- Top Navigation -->
-    <nav class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
-        <div class="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-brand-900 flex items-center justify-center text-white shadow-lg">
-                    <i class="fas fa-building text-sm"></i>
+        <!-- Top navigation -->
+        <nav class="app-nav">
+            <div class="app-nav-inner">
+                <div class="app-brand">
+                    <div class="app-brand-mark">
+                        <i class="fas fa-building"></i>
+                    </div>
+                    <div class="app-brand-text">
+                        <h1>Market<span class="brand-highlight">Intel</span></h1>
+                        <p>AI Valuation Engine</p>
+                    </div>
                 </div>
-                <div>
-                    <h1 class="font-bold text-slate-900 leading-tight">Market<span class="text-brand-600">Intel</span></h1>
-                    <p class="text-[0.65rem] font-medium text-slate-400 uppercase tracking-widest hidden sm:block">AI Valuation Engine</p>
+                <div class="app-nav-actions">
+                    <button id="authStatusBtn" type="button" class="nav-pill" aria-expanded="false">
+                        Sign in
+                    </button>
+                    <button id="historyToggle" type="button" class="nav-icon-btn" aria-label="Open saved valuations" aria-expanded="false">
+                        <i class="fas fa-clock-rotate-left"></i>
+                        <span id="historyCountBadge" class="history-count hidden">0</span>
+                    </button>
                 </div>
             </div>
-            <div class="flex items-center gap-2 sm:gap-3">
-                <button id="authStatusBtn" type="button" class="text-xs font-medium text-brand-600 bg-brand-50 px-3 py-1.5 rounded-full hover:bg-brand-100 transition-colors">
-                    Sign in
-                </button>
-                <button id="historyToggle" type="button" class="relative w-10 h-10 rounded-full border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-sm transition-colors" aria-label="Open saved valuations" aria-expanded="false">
-                    <i class="fas fa-bars"></i>
-                    <span id="historyCountBadge" class="history-count hidden">0</span>
-                </button>
-            </div>
-        </div>
-    </nav>
+        </nav>
 
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 pt-4">
-        
-        <!-- Introduction (Mobile Friendly) -->
-        <header class="mb-4 animate-fade-in">
-            <h2 class="text-3xl font-serif font-semibold text-slate-900 mb-1">CMA Generator</h2>
-        </header>
+        <!-- Hero + main content -->
+        <main class="app-content">
+            <header class="app-hero">
+                <h2>CMA Generator</h2>
+                <p>Enter a property and we'll run a multi-agent comparative market analysis.</p>
+            </header>
 
-        <form id="reportForm" class="space-y-6">
-            
-            <!-- Main Input Card -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up relative">
-                <div class="p-1 bg-gradient-to-r from-brand-500 via-brand-600 to-brand-900 opacity-20 h-1"></div>
-                <div class="p-6 sm:p-8 space-y-6">
-                    <!-- Property Address -->
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Subject Property</label>
-                        <div class="input-group mb-2 has-settings-action">
-                            <i class="fas fa-search input-icon"></i>
-                            <input type="text" id="propertyAddress" class="custom-input" placeholder="e.g. 123 Maple Ave, Springfield, IL">
-                            <button id="settingsToggle" type="button" class="settings-toggle settings-toggle--inline" aria-label="Open settings" aria-expanded="false">
-                                <i class="fas fa-cog"></i>
-                            </button>
+            <form id="reportForm" novalidate>
+
+                <!-- Primary input card -->
+                <section class="form-card">
+                    <div class="form-card-accent" aria-hidden="true"></div>
+                    <div class="form-card-body">
+
+                        <!-- Subject property -->
+                        <div>
+                            <label class="field-label" for="propertyAddress">
+                                <span>Subject property</span>
+                                <span class="field-hint">Address required</span>
+                            </label>
+                            <div class="input-group has-settings-action">
+                                <i class="fas fa-location-dot input-icon"></i>
+                                <input type="text" id="propertyAddress" class="custom-input" placeholder="123 Maple Ave, Springfield, IL" autocomplete="street-address">
+                                <button id="settingsToggle" type="button" class="settings-toggle settings-toggle--inline" aria-label="Open settings" aria-expanded="false">
+                                    <i class="fas fa-sliders"></i>
+                                </button>
+                            </div>
                         </div>
+
+                        <!-- Two-column on tablet+ -->
+                        <div class="field-grid">
+                            <!-- File upload -->
+                            <div>
+                                <label class="field-label" for="propertyPdf">
+                                    <span>Docs &amp; photos</span>
+                                    <span class="field-hint">Optional</span>
+                                </label>
+                                <div class="file-upload-wrap">
+                                    <input type="file" id="propertyPdf" accept="application/pdf,image/*" multiple>
+                                    <div class="custom-file-upload">
+                                        <div class="cf-icon"><i class="fas fa-cloud-arrow-up"></i></div>
+                                        <p class="cf-title">Tap to upload files</p>
+                                        <p class="cf-hint">PDFs, photos, tax records</p>
+                                    </div>
+                                </div>
+                                <div id="pdfUploadStatus" class="upload-status">
+                                    <span id="pdfUploadPill" class="status-pill">No file</span>
+                                    <span id="pdfUploadName" class="text-slate-500">Upload optional supporting docs.</span>
+                                </div>
+                                <div id="pdfUploadPreviews" class="upload-previews hidden" aria-live="polite"></div>
+                            </div>
+
+                            <!-- Property details -->
+                            <div>
+                                <label class="field-label" for="additionalDetails">
+                                    <span>Property details</span>
+                                    <span class="field-hint">Optional</span>
+                                </label>
+                                <textarea id="additionalDetails" rows="5" class="custom-input no-icon" placeholder="Beds, baths, sqft, condition, recent updates..."></textarea>
+                            </div>
+                        </div>
+
+                    </div>
+                </section>
+
+                <!-- Hidden field (still required by app logic) -->
+                <div class="hidden">
+                    <textarea id="specialInstructions"></textarea>
+                </div>
+
+                <!-- Special instructions disclosure -->
+                <details class="disclosure mt-5">
+                    <summary>
+                        <span class="disclosure-icon"><i class="fas fa-feather-pointed"></i></span>
+                        <span class="disclosure-label">Add special instructions</span>
+                        <i class="fas fa-plus disclosure-chevron"></i>
+                    </summary>
+                    <div class="disclosure-body">
+                        <textarea id="visibleInstructions" rows="3" class="custom-input no-icon" placeholder="Focus on school district, recent roof repairs, neighborhood comps..."></textarea>
+                    </div>
+                </details>
+
+                <!-- Sticky bottom action bar -->
+                <div class="action-bar">
+                    <div class="action-bar-inner">
+                        <button type="button" id="newValuationBtn" class="btn-secondary" aria-label="Start a new valuation">
+                            <i class="fas fa-rotate-right"></i>
+                            <span>New</span>
+                        </button>
+                        <button type="submit" id="generateBtn" class="btn-primary">
+                            <i class="fas fa-bolt"></i>
+                            <span>Generate Analysis</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- ============================================
+                 Settings modal (bottom-sheet on mobile)
+                 ============================================ -->
+            <div id="settingsModal" class="settings-modal hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+                <div id="settingsOverlay" class="settings-overlay"></div>
+                <div class="settings-panel" role="document">
+                    <div class="settings-panel-header">
+                        <div>
+                            <p class="settings-eyebrow">Configuration</p>
+                            <h2 id="settingsTitle">Account &amp; Settings</h2>
+                            <p class="settings-subtitle">Manage your account and report preferences.</p>
+                        </div>
+                        <button id="settingsClose" type="button" class="settings-close" aria-label="Close settings">
+                            <i class="fas fa-xmark"></i>
+                        </button>
                     </div>
 
-                    <!-- PDF & Details Grid -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- File Upload -->
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-2">Docs & Photos (Optional)</label>
-                            <div class="relative">
-                                <input type="file" id="propertyPdf" accept="application/pdf,image/*" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                                <div class="custom-file-upload">
-                                    <i class="fas fa-cloud-upload-alt text-2xl text-slate-400 mb-2"></i>
-                                    <p class="text-sm font-medium text-slate-600">Tap to upload files</p>
-                                    <p class="text-xs text-slate-400 mt-1">PDFs, photos, tax records, etc.</p>
+                    <div class="settings-panel-body">
+
+                        <!-- Account (full width) -->
+                        <div class="settings-row-full">
+                            <label class="settings-section-label">Account</label>
+                            <p id="authStatusText" class="text-sm text-slate-500 mb-3">Sign in or create an account to save reports across devices.</p>
+                            <div id="authCredentialFields" class="settings-account-grid">
+                                <div class="input-group" style="margin-bottom:0">
+                                    <i class="fas fa-envelope input-icon"></i>
+                                    <input type="email" id="authEmail" class="custom-input" placeholder="you@example.com" autocomplete="email" inputmode="email">
+                                </div>
+                                <div class="input-group" style="margin-bottom:0">
+                                    <i class="fas fa-lock input-icon"></i>
+                                    <input type="password" id="authPassword" class="custom-input" placeholder="Password" autocomplete="current-password" minlength="8">
                                 </div>
                             </div>
-                            <div id="pdfUploadStatus" class="upload-status">
-                                <span id="pdfUploadPill" class="status-pill">No file</span>
-                                <span id="pdfUploadName" class="text-slate-500">Upload optional supporting docs.</span>
+                            <div class="settings-account-actions">
+                                <button id="authLoginBtn" type="button" class="history-action">
+                                    <i class="fas fa-right-to-bracket"></i> Sign in
+                                </button>
+                                <button id="authSignupBtn" type="button" class="history-action">
+                                    <i class="fas fa-user-plus"></i> Create account
+                                </button>
+                                <button id="authLogoutBtn" type="button" class="history-action danger hidden">
+                                    <i class="fas fa-right-from-bracket"></i> Sign out
+                                </button>
                             </div>
-                            <div id="pdfUploadPreviews" class="upload-previews hidden" aria-live="polite"></div>
                         </div>
 
-                        <!-- Additional Details -->
+                        <!-- Model -->
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-2">Property Details</label>
-                            <textarea id="additionalDetails" rows="4" class="custom-input !pl-4 !py-3 resize-none" placeholder="Beds, baths, sqft, condition, updates..."></textarea>
-                        </div>
-                    </div>
-
-                </div>
-            </div>
-
-            <!-- Hidden Fields (Required for Logic) -->
-            <div class="hidden">
-                <textarea id="specialInstructions"></textarea>
-            </div>
-
-            <!-- Instructions (Collapsed) -->
-            <details class="group bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up" style="animation-delay: 0.15s;">
-                <summary class="flex items-center justify-between p-4 px-6 cursor-pointer bg-white hover:bg-slate-50 transition-colors">
-                    <span class="text-sm font-semibold text-slate-600">Add Special Instructions?</span>
-                    <i class="fas fa-plus text-xs text-slate-400 transition-transform group-open:rotate-45"></i>
-                </summary>
-                <div class="p-6 pt-0">
-                    <textarea id="visibleInstructions" rows="2" class="custom-input !pl-4 !py-3 resize-none mt-2" placeholder="Focus on school district, recent roof repairs, etc..."></textarea>
-                </div>
-            </details>
-
-            <!-- Sticky Bottom Action Bar -->
-            <div class="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-lg border-t border-slate-200 z-40">
-                <div class="max-w-4xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-                    <button type="button" id="newValuationBtn" class="w-full sm:w-auto sm:min-w-[160px] border border-slate-200 text-slate-600 font-semibold py-3 px-5 rounded-xl bg-white hover:bg-slate-50 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <i class="fas fa-rotate-right"></i>
-                        <span>New Valuation</span>
-                    </button>
-                    <button type="submit" id="generateBtn" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3.5 px-6 rounded-xl shadow-lg shadow-brand-500/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-lg">
-                        <i class="fas fa-bolt"></i>
-                        <span>Generate Analysis</span>
-                    </button>
-                </div>
-            </div>
-        </form>
-
-        <!-- Settings Modal -->
-        <div id="settingsModal" class="settings-modal hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-            <div id="settingsOverlay" class="settings-overlay"></div>
-            <div class="settings-panel" role="document">
-                <div class="settings-panel-header">
-                    <div>
-                        <p class="settings-eyebrow">Configuration</p>
-                        <h2 id="settingsTitle">Account & Settings</h2>
-                        <p class="settings-subtitle">Manage your account and report preferences.</p>
-                    </div>
-                    <button id="settingsClose" type="button" class="settings-close" aria-label="Close settings">
-                        <i class="fas fa-xmark"></i>
-                    </button>
-                </div>
-
-                <div class="settings-panel-body grid gap-6 md:grid-cols-2">
-                    <!-- Account -->
-                    <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Account</label>
-                        <p id="authStatusText" class="text-sm text-slate-500 mb-3">Sign in or create an account to save reports across devices.</p>
-                        <div id="authCredentialFields" class="grid gap-3 md:grid-cols-2">
-                            <div class="input-group !mb-0">
-                                <i class="fas fa-envelope input-icon"></i>
-                                <input type="email" id="authEmail" class="custom-input" placeholder="you@example.com" autocomplete="email">
-                            </div>
-                            <div class="input-group !mb-0">
-                                <i class="fas fa-lock input-icon"></i>
-                                <input type="password" id="authPassword" class="custom-input" placeholder="Password" autocomplete="current-password" minlength="8">
+                            <label class="settings-section-label" for="modelSelect">AI model</label>
+                            <div class="select-wrap">
+                                <i class="fas fa-microchip input-icon"></i>
+                                <select id="modelSelect" class="custom-input">
+                                    <option value="gemini-flash-lite-latest" selected>Fast</option>
+                                    <option value="gemini-flash-latest">Smart</option>
+                                </select>
+                                <i class="fas fa-chevron-down select-chevron"></i>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2 mt-3">
-                            <button id="authLoginBtn" type="button" class="history-action">
-                                <i class="fas fa-right-to-bracket"></i> Sign in
-                            </button>
-                            <button id="authSignupBtn" type="button" class="history-action">
-                                <i class="fas fa-user-plus"></i> Create account
-                            </button>
-                            <button id="authLogoutBtn" type="button" class="history-action danger hidden">
-                                <i class="fas fa-right-from-bracket"></i> Sign out
-                            </button>
-                        </div>
-                    </div>
 
-                    <!-- Model Selection -->
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">AI Model</label>
-                        <div class="relative">
-                            <i class="fas fa-microchip absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
-                            <select id="modelSelect" class="custom-input appearance-none bg-white">
-                                <option value="gemini-flash-lite-latest" selected>Fast</option>
-                                <option value="gemini-flash-latest">Smart</option>
-                            </select>
-                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                        <!-- Audience -->
+                        <div>
+                            <label class="settings-section-label" for="reportAudience">Target audience</label>
+                            <div class="select-wrap">
+                                <i class="fas fa-users input-icon"></i>
+                                <select id="reportAudience" class="custom-input">
+                                    <option value="buyer">Buyer (Negotiation)</option>
+                                    <option value="seller" selected>Seller (Pricing)</option>
+                                    <option value="investor">Investor (ROI)</option>
+                                </select>
+                                <i class="fas fa-chevron-down select-chevron"></i>
+                            </div>
                         </div>
-                    </div>
 
-                    <!-- Report Audience -->
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Target Audience</label>
-                        <div class="relative">
-                            <i class="fas fa-users absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
-                            <select id="reportAudience" class="custom-input appearance-none bg-white">
-                                <option value="buyer">Buyer (Negotiation)</option>
-                                <option value="seller" selected>Seller (Pricing)</option>
-                                <option value="investor">Investor (ROI)</option>
-                            </select>
-                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                        <!-- Style -->
+                        <div class="settings-row-full">
+                            <label class="settings-section-label" for="promptSelect">Analysis style</label>
+                            <div class="select-wrap">
+                                <i class="fas fa-scroll input-icon"></i>
+                                <select id="promptSelect" class="custom-input">
+                                    <option value="standard">Standard Valuation</option>
+                                    <option value="experimental" selected>Bank-Grade CMA (Strict)</option>
+                                </select>
+                                <i class="fas fa-chevron-down select-chevron"></i>
+                            </div>
                         </div>
-                    </div>
 
-                    <!-- Prompt Style -->
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Analysis Style</label>
-                        <div class="relative">
-                            <i class="fas fa-scroll absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
-                            <select id="promptSelect" class="custom-input appearance-none bg-white">
-                                <option value="standard">Standard Valuation</option>
-                                <option value="experimental" selected>Bank-Grade CMA (Strict)</option>
-                            </select>
-                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
-                        </div>
                     </div>
-
                 </div>
             </div>
-        </div>
 
-        <!-- Progress Dashboard -->
-        <div id="progressSection" class="hidden mt-8 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden animate-slide-up">
-            <div class="p-6 bg-slate-900 text-white">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 id="progressTitle" class="text-lg font-semibold flex items-center gap-2">
-                        <i class="fas fa-circle-notch fa-spin text-brand-500"></i>
-                        Running Analysis...
-                    </h3>
-                    <span id="progressText" class="text-sm font-mono text-slate-400 bg-slate-800 px-3 py-1 rounded-full">0/0</span>
+            <!-- ============================================
+                 Progress dashboard
+                 ============================================ -->
+            <div id="progressSection" class="progress-card hidden">
+                <div class="progress-card-head">
+                    <div class="progress-head-row">
+                        <h3 id="progressTitle">
+                            <i class="fas fa-circle-notch fa-spin"></i>
+                            Running analysis...
+                        </h3>
+                        <span id="progressText">0/0</span>
+                    </div>
+                    <div class="progress-track">
+                        <div id="progressBar" style="width: 0%"></div>
+                    </div>
                 </div>
-                <!-- Progress Bar -->
-                <div class="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                    <div id="progressBar" class="h-full bg-brand-500 transition-all duration-500 ease-out" style="width: 0%"></div>
-                </div>
+                <div id="reportStatusList"></div>
             </div>
-            
-            <!-- Live Logs -->
-            <div id="reportStatusList" class="p-4 max-h-60 overflow-y-auto bg-slate-50 border-t border-slate-100 space-y-2">
-                <!-- Status items injected here -->
-            </div>
-        </div>
 
-        <!-- Output Container -->
-        <div id="outputWrapper" class="space-y-8 mt-8 pb-10">
-            
-            <!-- Final Merged Report -->
-            <div id="finalReportSection" class="hidden">
-                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-                    <h2 class="text-2xl font-serif font-bold text-slate-900 flex items-center gap-3">
-                        <span class="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-sm"><i class="fas fa-check"></i></span>
-                        Final Consensus
-                    </h2>
-                    <button id="downloadPdfBtn" disabled class="w-full sm:w-auto px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <i class="fas fa-file-pdf text-red-500"></i> Download PDF
+            <!-- ============================================
+                 Output container
+                 ============================================ -->
+            <div id="outputWrapper">
+
+                <!-- Final consensus report -->
+                <div id="finalReportSection" class="final-report-section hidden">
+                    <div class="final-report-head">
+                        <h2 class="final-report-title">
+                            <span class="final-report-title-mark"><i class="fas fa-check"></i></span>
+                            Final consensus
+                        </h2>
+                        <button id="downloadPdfBtn" type="button" disabled class="btn-pdf">
+                            <i class="fas fa-file-pdf"></i> Download PDF
+                        </button>
+                    </div>
+
+                    <p id="finalReportStatus">Initializing merger...</p>
+
+                    <div class="report-paper">
+                        <div class="report-paper-accent" aria-hidden="true"></div>
+                        <div id="finalReportContent" class="prose max-w-none"></div>
+                    </div>
+
+                    <div class="report-disclaimer">
+                        <i class="fas fa-circle-info"></i>
+                        <p><strong>Disclaimer:</strong> This is an AI-generated estimate based on public data. It is not an official appraisal. Consult a licensed professional for financial decisions.</p>
+                    </div>
+                </div>
+
+                <!-- Individual reports accordion -->
+                <div id="reportsContainer"></div>
+            </div>
+
+        </main>
+
+        <!-- ============================================
+             Saved valuations drawer
+             ============================================ -->
+        <div id="historyDrawer" class="history-drawer hidden" aria-hidden="true">
+            <div id="historyOverlay" class="history-overlay" tabindex="-1"></div>
+            <aside class="history-panel" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+                <div class="history-panel-header">
+                    <div>
+                        <p class="history-eyebrow">Archive</p>
+                        <h2 id="historyTitle">Saved Valuations</h2>
+                    </div>
+                    <button id="historyClose" type="button" class="history-close" aria-label="Close saved valuations">
+                        <i class="fas fa-times"></i>
                     </button>
                 </div>
-
-                <p id="finalReportStatus" class="text-sm text-slate-500 italic mb-4">Initializing merger...</p>
-
-                <!-- Paper Sheet Effect -->
-                <div class="bg-white rounded-xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
-                    <div class="h-2 bg-gradient-to-r from-brand-500 to-emerald-500"></div>
-                    <div id="finalReportContent" class="prose max-w-none p-8 sm:p-12"></div>
+                <div class="history-panel-actions">
+                    <button id="historyRefresh" type="button" class="history-action">
+                        <i class="fas fa-rotate"></i> Refresh
+                    </button>
+                    <button id="historyClear" type="button" class="history-action danger">
+                        <i class="fas fa-trash"></i> Clear all
+                    </button>
                 </div>
-                
-                <div class="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-3">
-                    <i class="fas fa-exclamation-triangle mt-1"></i>
-                    <p class="m-0"><strong>Disclaimer:</strong> This is an AI-generated estimate based on public data. It is not an official appraisal. Consult a licensed professional for financial decisions.</p>
-                </div>
-            </div>
-
-            <!-- Individual Reports Accordion List -->
-            <div id="reportsContainer" class="space-y-4"></div>
+                <div id="historyList" class="history-list" aria-live="polite"></div>
+                <div id="historyEmpty" class="history-empty hidden">No saved valuations yet.</div>
+            </aside>
         </div>
-
     </div>
 
-    <!-- Saved Valuations Drawer -->
-    <div id="historyDrawer" class="history-drawer hidden" aria-hidden="true">
-        <div id="historyOverlay" class="history-overlay" tabindex="-1"></div>
-        <aside class="history-panel" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
-            <div class="history-panel-header">
-                <div>
-                    <p class="history-eyebrow">Archive</p>
-                    <h2 id="historyTitle">Saved Valuations</h2>
-                </div>
-                <button id="historyClose" type="button" class="history-close" aria-label="Close saved valuations">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="history-panel-actions">
-                <button id="historyRefresh" type="button" class="history-action">
-                    <i class="fas fa-rotate"></i> Refresh
-                </button>
-                <button id="historyClear" type="button" class="history-action danger">
-                    <i class="fas fa-trash"></i> Clear All
-                </button>
-            </div>
-            <div id="historyList" class="history-list" aria-live="polite"></div>
-            <div id="historyEmpty" class="history-empty hidden">No saved valuations yet.</div>
-        </aside>
-    </div>
-    </div>
-
-    <script src="app.js?v=3.5"></script>
+    <script src="app.js?v=4.0"></script>
 </body>
 </html>
