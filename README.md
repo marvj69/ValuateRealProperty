@@ -7,7 +7,7 @@
 ### 🏠 Comprehensive Property Analysis
 - **Property Valuation Reports**: Generate detailed Comparative Market Analysis (CMA) reports with estimated market value ranges
 - **Web-Grounded Research**: Automatically searches for comparable sales, active listings, and market trends using Google's web search integration
-- **Multiple Report Generation**: Automatically generate 16 individual reports and merge them into a consensus analysis
+- **Final Report Generation**: Automatically process multiple analyses behind the scenes and present one final valuation report
 - **Document Support**: Upload PDFs, photos, tax records, and other property documents for enhanced analysis
 
 ### 🎯 Audience-Specific Reports
@@ -95,12 +95,12 @@ Choose between two analysis approaches:
 3. **Generate Analysis**
    - Click "Generate Analysis"
    - The frontend submits the request to `/api/reports` and receives a report ID
-   - Watch the queued/processing/completed/failed status while the backend works
-   - Reports merge automatically into a final consensus report
+   - Watch the simple queued/processing status while the backend works
+   - The processing view stays simple while the backend works
+   - The final report displays automatically when it is ready
 
 4. **Review Results**
-   - View the final merged report with consensus valuation
-   - Expand individual reports to see detailed analyses
+   - View the final report and valuation guidance
    - Download as PDF for sharing or record-keeping
 
 ### Advanced Features

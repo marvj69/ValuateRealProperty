@@ -1692,7 +1692,7 @@ textarea.custom-input.no-icon,
 }
 
 .progress-card-head {
-    padding: 22px 22px 20px;
+    padding: 22px;
     background: linear-gradient(135deg, #08153a 0%, #0b1f55 50%, #001b54 100%);
     color: #ffffff;
     position: relative;
@@ -1711,8 +1711,8 @@ textarea.custom-input.no-icon,
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 16px;
     position: relative;
+    gap: 18px;
 }
 
 #progressTitle {
@@ -1738,38 +1738,17 @@ textarea.custom-input.no-icon,
     border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.progress-track {
-    position: relative;
-    height: 8px;
-    width: 100%;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: var(--r-pill);
-    overflow: hidden;
-}
-
-#progressBar {
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent-500) 0%, #b8d6e7 100%);
-    border-radius: var(--r-pill);
-    transition: width 600ms var(--ease-out);
-    box-shadow: 0 0 12px rgba(184, 214, 231, 0.4);
-}
-
-#reportStatusList {
-    padding: 12px 14px;
-    max-height: 280px;
-    overflow-y: auto;
+.progress-card-body {
+    padding: 18px 22px;
     background: linear-gradient(180deg, var(--ink-50) 0%, #fbfcfe 100%);
     border-top: 1px solid var(--ink-100);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
 }
 
-#reportStatusList > div {
-    border-radius: 10px;
-    transition: all var(--t-fast) var(--ease);
-    animation: fade-in var(--t-med) var(--ease-out) both;
+#progressMessage {
+    margin: 0;
+    color: var(--ink-600);
+    font-size: 0.94rem;
+    line-height: 1.6;
 }
 
 /* -----------------------------------------------------------
@@ -1895,17 +1874,7 @@ textarea.custom-input.no-icon,
 .report-disclaimer p { margin: 0; }
 
 /* -----------------------------------------------------------
-   15 — Individual reports accordion
------------------------------------------------------------ */
-#reportsContainer {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-top: 20px;
-}
-
-/* -----------------------------------------------------------
-   16 — Prose (markdown rendering)
+   15 — Prose (markdown rendering)
 ----------------------------------------------------------- */
 .prose h1 { font-family: 'Newsreader', serif; font-weight: 700; font-size: 2rem; color: #1e293b; margin-top: 2rem; margin-bottom: 1rem; line-height: 1.2; }
 .prose h2 { font-family: 'Newsreader', serif; font-weight: 600; font-size: 1.5rem; color: #334155; margin-top: 1.5rem; margin-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }

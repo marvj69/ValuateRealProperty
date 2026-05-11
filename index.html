@@ -20,7 +20,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="tailwind-config.js"></script>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=4.4">
 </head>
 <body class="auth-loading">
 
@@ -354,15 +354,14 @@
                     <div class="progress-head-row">
                         <h3 id="progressTitle">
                             <i class="fas fa-circle-notch fa-spin"></i>
-                            Running analysis...
+                            Processing
                         </h3>
-                        <span id="progressText">0/0</span>
-                    </div>
-                    <div class="progress-track">
-                        <div id="progressBar" style="width: 0%"></div>
+                        <span id="progressText">Working</span>
                     </div>
                 </div>
-                <div id="reportStatusList"></div>
+                <div class="progress-card-body">
+                    <p id="progressMessage">The backend is processing the valuation. The final report will appear when complete.</p>
+                </div>
             </div>
 
             <!-- ============================================
@@ -370,12 +369,12 @@
                  ============================================ -->
             <div id="outputWrapper">
 
-                <!-- Final consensus report -->
+                <!-- Final report -->
                 <div id="finalReportSection" class="final-report-section hidden">
                     <div class="final-report-head">
                         <h2 class="final-report-title">
                             <span class="final-report-title-mark"><i class="fas fa-check"></i></span>
-                            Final consensus
+                            Final report
                         </h2>
                         <button id="downloadPdfBtn" type="button" disabled class="btn-pdf">
                             <i class="fas fa-file-pdf"></i> Download PDF
@@ -394,9 +393,6 @@
                         <p><strong>Disclaimer:</strong> This is an AI-generated estimate based on public data. It is not an official appraisal. Consult a licensed professional for financial decisions.</p>
                     </div>
                 </div>
-
-                <!-- Individual reports accordion -->
-                <div id="reportsContainer"></div>
             </div>
 
         </main>
@@ -430,6 +426,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=4.3"></script>
+    <script src="app.js?v=4.4"></script>
 </body>
 </html>

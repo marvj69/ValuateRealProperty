@@ -82,15 +82,13 @@
     const form = document.getElementById('reportForm');
     const generateBtn = document.getElementById('generateBtn');
     const progressSection = document.getElementById('progressSection');
-    const progressBar = document.getElementById('progressBar');
     const progressText = document.getElementById('progressText');
     const progressTitle = document.getElementById('progressTitle');
-    const reportStatusList = document.getElementById('reportStatusList');
+    const progressMessage = document.getElementById('progressMessage');
     const finalReportSection = document.getElementById('finalReportSection');
     const finalReportStatus = document.getElementById('finalReportStatus');
     const finalReportContent = document.getElementById('finalReportContent');
     const downloadPdfBtn = document.getElementById('downloadPdfBtn');
-    const reportsContainer = document.getElementById('reportsContainer');
     const pdfUploadStatus = document.getElementById('pdfUploadStatus');
     const pdfUploadPill = document.getElementById('pdfUploadPill');
     const pdfUploadName = document.getElementById('pdfUploadName');
@@ -130,7 +128,6 @@
         currentReport: null,
         history: [],
         pollTimer: null,
-        renderedReportIndices: new Set(),
         user: null
     };
 
@@ -979,60 +976,34 @@
         return Promise.all(files.map((file) => readFileAsBase64(file)));
     }
 
-    function prepareUiForRun(reportCount = DEFAULT_REPORT_COUNT) {
-        appState.renderedReportIndices.clear();
+    function setProgressDisplay({ title, iconClass, badge, message }) {
+        if (progressTitle) {
+            progressTitle.innerHTML = `<i class="${iconClass}"></i>${escapeHtml(title)}`;
+        }
+        if (progressText) {
+            progressText.textContent = badge || title;
+        }
+        if (progressMessage) {
+            progressMessage.textContent = message || '';
+        }
+    }
+
+    function prepareUiForRun() {
         setGenerateBusy(true, 'Generate Analysis');
         if (newValuationBtn) newValuationBtn.disabled = true;
         setNewValuationVisibility(false);
         updateDownloadButtonState(false);
 
-        if (progressTitle) {
-            progressTitle.innerHTML = '<i class="fas fa-circle-notch fa-spin text-brand-500"></i>Queued';
-        }
+        setProgressDisplay({
+            title: 'Processing',
+            iconClass: 'fas fa-circle-notch fa-spin text-brand-500',
+            badge: 'Working',
+            message: 'Submitting the request and preparing the final report.'
+        });
         if (progressSection) progressSection.classList.remove('hidden');
         if (finalReportSection) finalReportSection.classList.add('hidden');
         if (finalReportStatus) finalReportStatus.textContent = 'Submitting request to the backend...';
         if (finalReportContent) finalReportContent.innerHTML = '';
-        if (reportsContainer) reportsContainer.innerHTML = '';
-        if (reportStatusList) {
-            reportStatusList.innerHTML = '';
-            for (let i = 0; i < reportCount; i++) {
-                const statusItem = document.createElement('div');
-                statusItem.id = `status-${i}`;
-                statusItem.className = 'flex items-center gap-3 p-3 rounded-lg bg-white border border-slate-100 text-sm';
-                statusItem.innerHTML = `
-                    <div class="w-2 h-2 rounded-full bg-slate-300"></div>
-                    <span class="text-slate-500">Report ${i + 1}: Waiting...</span>
-                `;
-                reportStatusList.appendChild(statusItem);
-            }
-        }
-        updateProgress(0, reportCount);
-    }
-
-    function updateProgress(completed, total) {
-        const safeTotal = total || DEFAULT_REPORT_COUNT;
-        const safeCompleted = Math.max(0, Math.min(completed || 0, safeTotal));
-        const percent = safeTotal > 0 ? (safeCompleted / safeTotal) * 100 : 0;
-        if (progressBar) progressBar.style.width = `${percent}%`;
-        if (progressText) progressText.textContent = `${safeCompleted} / ${safeTotal}`;
-    }
-
-    function updateStatus(index, status, message) {
-        const statusItem = document.getElementById(`status-${index}`);
-        if (!statusItem) return;
-
-        const config = {
-            processing: ['bg-blue-500 animate-pulse', 'text-blue-600 font-medium'],
-            completed: ['bg-green-500', 'text-green-600 font-medium'],
-            failed: ['bg-red-500', 'text-red-600 font-medium'],
-            queued: ['bg-slate-300', 'text-slate-500']
-        }[status] || ['bg-slate-300', 'text-slate-500'];
-
-        statusItem.innerHTML = `
-            <div class="w-2 h-2 rounded-full ${config[0]}"></div>
-            <span class="${config[1]} flex-1">Report ${index + 1}: ${escapeHtml(message)}</span>
-        `;
     }
 
     function applyReportToUi(rawReport, { scroll = false } = {}) {
@@ -1045,17 +1016,9 @@
         requestState.inferredAddress = report.finalReport?.inferredAddress || report.output?.inferredAddress || '';
         requestState.finalValueRange = report.finalReport?.valueRange || report.finalReport?.valuations || null;
 
-        const total = report.progress.total || DEFAULT_REPORT_COUNT;
-        const completed = report.status === 'completed'
-            ? total
-            : report.progress.completed || countFinishedReports(report.individualReports);
-
-        if (progressSection?.classList.contains('hidden') || reportStatusList?.children.length !== total) {
-            prepareUiForRun(total);
+        if (report.status !== 'completed' && progressSection?.classList.contains('hidden')) {
+            prepareUiForRun();
         }
-
-        updateProgress(completed, total);
-        renderIndividualReports(report, total);
 
         if (report.status === 'queued') {
             showQueuedReport(report);
@@ -1071,38 +1034,25 @@
             stopPolling();
         }
 
-        if (scroll && progressSection) {
-            progressSection.scrollIntoView({ behavior: 'smooth' });
-        }
-    }
-
-    function renderIndividualReports(report, total) {
-        const items = report.individualReports || [];
-        for (let i = 0; i < total; i++) {
-            const item = items[i];
-            if (item?.success || item?.status === 'completed') {
-                updateStatus(i, 'completed', 'Completed');
-                if (!appState.renderedReportIndices.has(i)) {
-                    displayReport(i, item.content || item.output || '', item.searchSuggestions || []);
-                    appState.renderedReportIndices.add(i);
-                }
-            } else if (item?.error || item?.status === 'failed') {
-                const message = item.error?.message || item.error || 'Failed';
-                updateStatus(i, 'failed', `Error: ${message}`);
-            } else if (report.status === 'processing' && report.metadata?.runningIndex === i) {
-                updateStatus(i, 'processing', 'Generating...');
-            } else {
-                updateStatus(i, report.status === 'processing' ? 'queued' : report.status, 'Queued');
-            }
+        if (scroll) {
+            const scrollTarget = report.status === 'completed' || report.status === 'failed'
+                ? finalReportSection
+                : progressSection;
+            scrollTarget?.scrollIntoView({ behavior: 'smooth' });
         }
     }
 
     function showQueuedReport(report) {
         setGenerateBusy(true, 'Generate Analysis');
         if (newValuationBtn) newValuationBtn.disabled = false;
-        if (progressTitle) {
-            progressTitle.innerHTML = '<i class="fas fa-clock text-brand-500"></i>Queued';
-        }
+        if (progressSection) progressSection.classList.remove('hidden');
+        if (finalReportSection) finalReportSection.classList.add('hidden');
+        setProgressDisplay({
+            title: 'Queued',
+            iconClass: 'fas fa-clock text-brand-500',
+            badge: 'Waiting',
+            message: 'Your request is queued. The final report will appear here when it is ready.'
+        });
         if (finalReportStatus) {
             finalReportStatus.textContent = 'Your report has been queued. You can leave this page and return later.';
         }
@@ -1112,20 +1062,26 @@
     function showProcessingReport(report) {
         setGenerateBusy(true, 'Generate Analysis');
         if (newValuationBtn) newValuationBtn.disabled = false;
-        if (progressTitle) {
-            progressTitle.innerHTML = '<i class="fas fa-spinner fa-spin text-brand-500"></i>Processing';
-        }
+        if (progressSection) progressSection.classList.remove('hidden');
+        if (finalReportSection) finalReportSection.classList.add('hidden');
+        const phase = report.progress?.phase || report.metadata?.progress?.phase || report.metadata?.phase || report.phase || 'reports';
+        const message = phase === 'validating'
+            ? 'Validating comparable sales before the final report is shown.'
+            : phase === 'merging'
+                ? 'Generating the final report.'
+                : phase === 'compliance_review' || phase === 'compliance_rereview'
+                    ? 'Running the final ethics and compliance review.'
+                    : phase === 'compliance_revision'
+                        ? 'Revising the report to satisfy the final compliance review.'
+                        : 'The backend is processing the valuation. The final report will appear when complete.';
+        setProgressDisplay({
+            title: 'Processing',
+            iconClass: 'fas fa-spinner fa-spin text-brand-500',
+            badge: 'Working',
+            message
+        });
         if (finalReportStatus) {
-            const phase = report.progress?.phase || report.metadata?.progress?.phase || report.metadata?.phase || report.phase || 'reports';
-            finalReportStatus.textContent = phase === 'validating'
-                ? 'Validating comparable sales...'
-                : phase === 'merging'
-                    ? 'Generating the final consensus report...'
-                    : phase === 'compliance_review' || phase === 'compliance_rereview'
-                        ? 'Running the final ethics and compliance review...'
-                        : phase === 'compliance_revision'
-                            ? 'Revising the report to satisfy the final compliance review...'
-                            : 'The backend is generating this report. It will remain available in your account.';
+            finalReportStatus.textContent = message;
         }
         safeStorageSet(ACTIVE_REPORT_STORAGE_KEY, report.id);
     }
@@ -1137,9 +1093,7 @@
         safeStorageRemove(ACTIVE_REPORT_STORAGE_KEY);
         updateDownloadButtonState(Boolean(getFinalContent(report)));
 
-        if (progressTitle) {
-            progressTitle.innerHTML = '<i class="fas fa-check-circle text-green-500"></i>Analysis Complete';
-        }
+        if (progressSection) progressSection.classList.add('hidden');
         if (finalReportSection) finalReportSection.classList.remove('hidden');
         if (finalReportStatus) finalReportStatus.textContent = '';
         if (finalReportContent) finalReportContent.innerHTML = markdownToHtml(getFinalContent(report));
@@ -1153,9 +1107,7 @@
         safeStorageRemove(ACTIVE_REPORT_STORAGE_KEY);
         updateDownloadButtonState(false);
 
-        if (progressTitle) {
-            progressTitle.innerHTML = '<i class="fas fa-exclamation-circle text-red-500"></i>Analysis Failed';
-        }
+        if (progressSection) progressSection.classList.add('hidden');
         if (finalReportSection) finalReportSection.classList.remove('hidden');
         if (finalReportContent) finalReportContent.innerHTML = '';
         if (finalReportStatus) {
@@ -1210,7 +1162,7 @@
             return;
         }
 
-        prepareUiForRun(DEFAULT_REPORT_COUNT);
+        prepareUiForRun();
         progressSection?.scrollIntoView({ behavior: 'smooth' });
 
         let attachments = [];
@@ -1291,49 +1243,11 @@
             const report = normalizeReport(data.report || data);
             appState.activeReportId = report.id;
             safeStorageSet(ACTIVE_REPORT_STORAGE_KEY, report.id);
-            appState.renderedReportIndices.clear();
-            if (reportsContainer) reportsContainer.innerHTML = '';
             applyReportToUi(report, { scroll: true });
             await refreshHistoryList();
         } catch (error) {
             alert(error.message || 'Failed to retry report.');
         }
-    }
-
-    function displayReport(index, content) {
-        if (!reportsContainer || !content) return;
-        const reportCard = document.createElement('div');
-        reportCard.className = 'bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm';
-        reportCard.innerHTML = `
-            <button type="button" id="accordion-button-${index}" class="w-full text-left px-5 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors" aria-expanded="false" aria-controls="accordion-content-${index}">
-                <div class="flex items-center gap-3 w-full">
-                    <span class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-bold">${index + 1}</span>
-                    <span class="font-semibold text-slate-700">Individual Analysis</span>
-                </div>
-                <i id="accordion-icon-${index}" class="fas fa-chevron-down text-slate-400 transition-transform ml-3"></i>
-            </button>
-            <div id="accordion-content-${index}" class="hidden">
-                <div class="border-t border-slate-100 p-5 sm:p-8 bg-slate-50/50">
-                    <div class="prose max-w-none text-sm">${markdownToHtml(content)}</div>
-                </div>
-            </div>
-        `;
-
-        const button = reportCard.querySelector(`#accordion-button-${index}`);
-        button?.addEventListener('click', () => toggleAccordion(index));
-        reportsContainer.appendChild(reportCard);
-    }
-
-    function toggleAccordion(index) {
-        const content = document.getElementById(`accordion-content-${index}`);
-        const icon = document.getElementById(`accordion-icon-${index}`);
-        const button = document.getElementById(`accordion-button-${index}`);
-        if (!content || !icon || !button) return;
-
-        const hidden = content.classList.contains('hidden');
-        content.classList.toggle('hidden', !hidden);
-        icon.classList.toggle('rotate-180', hidden);
-        button.setAttribute('aria-expanded', hidden ? 'true' : 'false');
     }
 
     function extractValuations(content) {
@@ -1519,7 +1433,7 @@
             { label: 'Subject property', value: address },
             { label: 'Prepared for', value: formatHistoryAudience(inputs.reportAudience || finalReport.reportAudience || 'seller') },
             { label: 'Analysis style', value: promptLabel },
-            { label: 'Valuation', value: formatPdfValueSummary(mergedValue) || 'See consensus analysis' },
+            { label: 'Valuation', value: formatPdfValueSummary(mergedValue) || 'See final report' },
             { label: 'Generated', value: formatHistoryDate(report?.createdAt || report?.created_at || new Date().toISOString()) }
         ];
     }
@@ -1562,7 +1476,7 @@
             <section class="pdf-report-page">
                 <header class="pdf-report-header">
                     <div>
-                        <p class="pdf-report-kicker">Final consensus report</p>
+                        <p class="pdf-report-kicker">Final report</p>
                         <h2>${escapeHtml(address)}</h2>
                     </div>
                     <div class="pdf-header-logo-pair" aria-label="Brokerage logos">
@@ -1823,12 +1737,9 @@
 
         appState.currentReport = null;
         appState.activeReportId = null;
-        appState.renderedReportIndices.clear();
         safeStorageRemove(ACTIVE_REPORT_STORAGE_KEY);
 
         if (progressSection) progressSection.classList.add('hidden');
-        if (reportStatusList) reportStatusList.innerHTML = '';
-        if (reportsContainer) reportsContainer.innerHTML = '';
         if (finalReportContent) finalReportContent.innerHTML = '';
         if (finalReportStatus) finalReportStatus.textContent = '';
         if (finalReportSection) finalReportSection.classList.add('hidden');
