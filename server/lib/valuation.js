@@ -9,7 +9,8 @@ import {
 import { callGemini } from './gemini.js';
 
 const COMPLIANCE_REVIEW_MODEL = 'gemini-flash-lite-latest';
-const MAX_COMPLIANCE_REVISION_ROUNDS = 2;
+const COMPLIANCE_REVISION_MODEL = 'gemini-3-flash-preview';
+const MAX_COMPLIANCE_REREVIEW_ROUNDS = 2;
 
 function parseNumber(value) {
   if (value === null || value === undefined) return null;
@@ -211,12 +212,6 @@ function summarizeComplianceAttempt(review) {
   };
 }
 
-function buildComplianceFailureMessage(findings = []) {
-  const riskCategories = [...new Set(findings.map((finding) => finding.riskCategory).filter(Boolean))];
-  const categoryText = riskCategories.length ? ` (${riskCategories.join(', ')})` : '';
-  return `Final ethics and compliance review found unresolved concerns${categoryText}. The report was not delivered.`;
-}
-
 function cleanMarkdownResponse(responseText) {
   const cleaned = String(responseText || '').trim();
   const fencedMatch = cleaned.match(/^```(?:markdown|md)?\s*([\s\S]*?)\s*```$/i);
@@ -251,7 +246,7 @@ export async function reviewFinalReportCompliance({ reportText, reportAudience }
 
 async function reviseFinalReportForCompliance({ reportText, findings, reportAudience }) {
   const result = await callGemini({
-    model: COMPLIANCE_REVIEW_MODEL,
+    model: COMPLIANCE_REVISION_MODEL,
     prompt: buildComplianceRevisionPrompt({ reportText, findings, reportAudience }),
     enableSearch: false,
     index: 0,
@@ -273,7 +268,8 @@ export async function runFinalComplianceReview({ reportText, reportAudience, onP
   }
 
   const attempts = [];
-  for (let round = 0; round <= MAX_COMPLIANCE_REVISION_ROUNDS; round += 1) {
+  let revisionRounds = 0;
+  for (let round = 0; round <= MAX_COMPLIANCE_REREVIEW_ROUNDS; round += 1) {
     await notifyProgressPhase(onProgressPhase, round === 0 ? 'compliance_review' : 'compliance_rereview');
     const review = await reviewFinalReportCompliance({
       reportText: currentReportText,
@@ -286,21 +282,11 @@ export async function runFinalComplianceReview({ reportText, reportAudience, onP
         content: currentReportText,
         status: 'PASS',
         model: COMPLIANCE_REVIEW_MODEL,
+        revisionModel: COMPLIANCE_REVISION_MODEL,
         reviewedAt: review.reviewedAt,
-        revisionRounds: round,
+        revisionRounds,
         attempts: attempts.map(summarizeComplianceAttempt)
       };
-    }
-
-    if (round === MAX_COMPLIANCE_REVISION_ROUNDS) {
-      const error = new Error(buildComplianceFailureMessage(review.findings));
-      error.complianceReview = {
-        status: 'NEEDS_REVISION',
-        model: COMPLIANCE_REVIEW_MODEL,
-        findings: review.findings,
-        attempts: attempts.map(summarizeComplianceAttempt)
-      };
-      throw error;
     }
 
     await notifyProgressPhase(onProgressPhase, 'compliance_revision');
@@ -309,6 +295,21 @@ export async function runFinalComplianceReview({ reportText, reportAudience, onP
       findings: review.findings,
       reportAudience
     });
+    revisionRounds += 1;
+
+    if (round === MAX_COMPLIANCE_REREVIEW_ROUNDS) {
+      return {
+        content: currentReportText,
+        status: 'AUTO_REPAIRED',
+        model: COMPLIANCE_REVIEW_MODEL,
+        revisionModel: COMPLIANCE_REVISION_MODEL,
+        reviewedAt: review.reviewedAt,
+        repairedAt: new Date().toISOString(),
+        revisionRounds,
+        repairFindings: review.findings,
+        attempts: attempts.map(summarizeComplianceAttempt)
+      };
+    }
   }
 
   throw new Error('Final ethics and compliance review did not complete.');
@@ -382,8 +383,11 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
     complianceReview: {
       status: complianceReview.status,
       model: complianceReview.model,
+      revisionModel: complianceReview.revisionModel,
       reviewedAt: complianceReview.reviewedAt,
+      repairedAt: complianceReview.repairedAt,
       revisionRounds: complianceReview.revisionRounds,
+      repairFindings: complianceReview.repairFindings,
       attempts: complianceReview.attempts
     },
     generatedAt: new Date().toISOString()

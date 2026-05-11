@@ -263,10 +263,10 @@ ${reportText}`;
 }
 
 export function buildComplianceRevisionPrompt({ reportText, findings, reportAudience }) {
-  return `You are revising a client-facing real estate valuation report so it can pass a final ethics and professional-compliance review.
+  return `You are revising a client-facing real estate valuation report based on instructions from a separate ethics and professional-compliance reviewer.
 Intended audience: ${reportAudience || 'seller'}.
 
-Revise only what is necessary to address the compliance findings below.
+Revise only what is necessary to address the reviewer's compliance findings below.
 Rules:
 - Return the complete revised report in Markdown only.
 - Preserve supported property facts, comparable data, prices, citations, MLS numbers, and valuation labels unless a finding specifically identifies them as misleading or unsupported.
