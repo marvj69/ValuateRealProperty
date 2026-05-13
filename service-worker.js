@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v4.4';
+const CACHE_VERSION = 'v4.5';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
@@ -6,9 +6,9 @@ const OFFLINE_URL = './offline.html';
 const PRECACHE_URLS = [
   './',
   './index.html',
-  './styles.css?v=4.4',
-  './app.js?v=4.4',
-  './tailwind-config.js',
+  './tailwind.css?v=4.5',
+  './styles.css?v=4.5',
+  './app.js?v=4.5',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -113,8 +113,7 @@ self.addEventListener('fetch', (event) => {
     'fonts.googleapis.com',
     'fonts.gstatic.com',
     'cdnjs.cloudflare.com',
-    'cdn.jsdelivr.net',
-    'cdn.tailwindcss.com'
+    'cdn.jsdelivr.net'
   ];
 
   if (cdnHosts.includes(url.hostname)) {

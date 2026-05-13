@@ -68,7 +68,12 @@ Choose between two analysis approaches:
    npx vercel dev
    ```
 
-5. **Open in your browser**
+5. **Rebuild Tailwind CSS after changing utility classes**
+   ```bash
+   npm run build:css
+   ```
+
+6. **Open in your browser**
    Navigate to the local URL printed by Vercel, usually `http://localhost:3000`.
 
 ### First-Time Setup
@@ -174,10 +179,12 @@ valuate/
 ├── index.html          # Main application HTML
 ├── app.js              # Frontend UI, auth state, polling, history rendering
 ├── service-worker.js   # Static/offline caching
-├── package.json        # Backend dependencies and checks
+├── package.json        # Dependencies, checks, and Tailwind CSS build
 ├── vercel.json         # Vercel function, cron, and API cache config
+├── tailwind.css        # Generated Tailwind CSS bundle
+├── tailwind.config.cjs # Tailwind CLI configuration
+├── src/tailwind.css    # Tailwind CSS input
 ├── styles.css          # Custom styles
-├── tailwind-config.js  # Tailwind CSS configuration
 ├── manifest.json       # PWA manifest
 ├── offline.html        # Offline fallback page
 ├── icons/              # App icons for PWA
