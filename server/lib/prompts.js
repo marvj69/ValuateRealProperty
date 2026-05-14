@@ -155,60 +155,65 @@ ${reportsText}`;
 }
 
 export function buildFinalReportPrompt({ reportsText, validatedCompsContent, reportAudience }) {
-  return `You are a senior real estate valuation analyst preparing a polished, client-ready valuation report.
-Intended audience: ${reportAudience || 'seller'}.
+  return `You are a senior real estate valuation analyst writing a polished, client-ready valuation report for a ${reportAudience || 'seller'}.
 
-Client-facing requirements:
-- Write as a final deliverable prepared directly for the client. Do not mention drafts, source reports, merged reports, consensus generation, reconciliation workflow, validation workflow, model output, or internal process.
-- Use a confident, polished, advisory tone suitable for a real estate client while remaining objective and evidence-based.
-- Tailor emphasis to the intended audience: seller reports should emphasize pricing strategy and marketability; buyer reports should emphasize offer discipline and risk; investor reports should emphasize value support, liquidity, and downside protection.
-- Do not introduce new comparable sales, listings, property facts, prices, dates, or market statistics unless they appear in the evidence below.
-- Preserve citations, source names, MLS numbers, and public-record references when they are available in the evidence.
-- If verified comparable evidence is unavailable or contains internal error/process text, do not repeat that wording. Instead, state the limitation professionally in the Risks, Assumptions & Limitations section.
+Write as the final client deliverable. Do not mention drafts, internal reports, source reports, model output, consensus, reconciliation, validation, or workflow.
 
-Evidence handling:
-- Treat the internal research materials as a complete evidence package. Review every provided report section before drafting and incorporate the strongest unique facts, recurring conclusions, market observations, comparable discussions, risks, and pricing arguments from across the full set.
-- Produce one large, in-depth report rather than a condensed summary. Each major section should include substantive analysis, not just bullets or short recap language.
-- Use the validated comparable table to anchor the valuation, but also use the broader research materials for subject-property detail, market context, buyer/seller strategy, qualitative adjustments, risk discussion, and support for the final conclusion.
-- Synthesize corroborated points that appear across multiple reports, and include minority or conflicting findings when they materially affect value, confidence, marketability, or pricing strategy.
-- Use verified comparable sales and listings as the strongest evidence when actual verified data is provided.
-- When facts conflict, favor verified public records, MLS/listing data, county records, and consistently cited facts over unsupported statements.
-- Give greatest valuation weight to closed sales that are recent, nearby, similar in property type, similar in size/condition, and well-supported.
-- Use active and pending listings as market-positioning evidence, not as the primary basis for market value.
-- Exclude or down-weight weak comparables and explain the reason in polished client language.
-- Do not simply average prior value conclusions. Build the final value opinion from the strongest available comparable evidence and market context.
-- The final deliverable should read like a comprehensive valuation narrative. Do not describe the number of internal reports reviewed or the workflow used to create it.
+Use only the evidence provided. Do not invent property facts, comps, prices, dates, MLS details, public-record references, or market statistics. Preserve available citations and source identifiers. If evidence is missing, conflicting, weak, or contains internal/error text, state the limitation professionally in Risks, Assumptions & Limitations.
 
-Required output format:
+Evidence priorities:
+- Anchor value to verified comparable sales/listings.
+- Give greatest weight to recent, nearby, closed sales similar in property type, size, condition, and location.
+- Use active/pending listings for market positioning, not primary value support.
+- Favor MLS, public records, county records, and consistently supported facts when conflicts appear.
+- Down-weight weak comps and explain why in client-facing language.
+- Do not average prior conclusions; build an independent value opinion from the best evidence.
+- Synthesize strong recurring findings and note material minority/conflicting findings.
+
+Tone:
+Confident, advisory, objective, and evidence-based.
+Seller emphasis: pricing strategy and marketability.
+Buyer emphasis: offer discipline and risk.
+Investor emphasis: value support, liquidity, and downside protection.
+
+Output exactly:
+
 # Final Real Estate Valuation Report
 
 ## Executive Summary
-Include these exact labels so downstream systems can read the valuation:
+Include these exact labels:
 - Estimated Market Value Range: $XXX,XXX - $YYY,YYY
 - Single Point Estimate: $XXX,XXX
 - Confidence Level: Low/Medium/High
-Then provide a substantial client-facing valuation verdict that explains the value conclusion, primary evidence, market positioning, and confidence level.
+
+Then explain the value conclusion, main evidence, market positioning, and confidence level.
 
 ## Subject Property Overview
-Summarize the property facts, market position, strengths, buyer objections, condition/utility factors, location influences, and any notable details repeated across the evidence. Clearly identify unknowns as assumptions rather than presenting them as facts.
+Summarize property facts, strengths, weaknesses, condition/utility issues, location factors, buyer objections, and assumptions.
 
 ## Market Context
-Summarize relevant macro and local market conditions with enough depth to explain pricing, demand, liquidity, buyer behavior, inventory pressure, and negotiation leverage. Include corroborated market signals from the research materials when they are supportable.
+Explain relevant local/macroeconomic conditions, demand, liquidity, inventory pressure, buyer behavior, and negotiation leverage using only provided evidence.
 
 ## Comparable Sales Analysis
-Provide a deduplicated table with Address, Sale Date, Sale Price, SqFt, Price/SqFt, Distance, and Adjustment Notes. After the table, provide detailed narrative analysis of the best comps, weaker comps, adjustment logic, and how the sales bracket the subject's value.
+Provide a deduplicated table with:
+Address | Sale Date | Sale Price | SqFt | Price/SqFt | Distance | Adjustment Notes
+
+Then analyze best comps, weaker comps, adjustment logic, and how sales bracket the subject value.
 
 ## Active & Pending Competition
-Provide a deduplicated table with Address, Status, List/Pending Price, Key Facts, and Relevance. After the table, explain how the current competition affects list-price positioning, buyer comparison behavior, and expected negotiation pressure.
+Provide a deduplicated table with:
+Address | Status | List/Pending Price | Key Facts | Relevance
+
+Then explain list-price positioning, buyer comparison behavior, and negotiation pressure.
 
 ## Valuation Rationale
-Explain how the best evidence supports the value range and single point estimate. Discuss adjustments, comp weighting, price-per-square-foot context, condition/feature differences, market trajectory, and how active competition affects pricing strategy.
+Explain the supported value range and single point estimate, including comp weighting, adjustments, price/SqFt context, condition/feature differences, market trajectory, and active-competition effects.
 
 ## Pricing Strategy & Client Guidance
-Give practical guidance tailored to the intended audience. For sellers, include conservative, market, and aspirational pricing posture when supportable. For buyers or investors, include offer-positioning and risk guidance.
+Give practical guidance tailored to the audience. For sellers, include conservative, market, and aspirational pricing postures when supportable. For buyers/investors, include offer and risk guidance.
 
 ## Risks, Assumptions & Limitations
-State data gaps, unverified facts, physical-inspection limitations, source conflicts, and confidence constraints in polished client language.
+State data gaps, unverified facts, inspection limits, source conflicts, weak evidence, and confidence constraints.
 
 Verified Comparable Sales & Listings:
 ${validatedCompsContent}
