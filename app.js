@@ -10,6 +10,14 @@
         reportAudience: { elementId: 'reportAudience', defaultValue: 'seller' },
         promptKey: { elementId: 'promptSelect', defaultValue: 'experimental' }
     });
+    const REPORT_MODEL_TIERS = Object.freeze({
+        'gemini-flash-lite-latest': 'fast',
+        'gemini-flash-latest': 'smart'
+    });
+    const REPORT_TIER_DISPLAY = Object.freeze({
+        fast: { label: 'Fast', icon: 'fa-bolt', model: 'gemini-flash-lite-latest' },
+        smart: { label: 'Smart', icon: 'fa-brain', model: 'gemini-flash-latest' }
+    });
     const PDF_BRAND_ASSETS = Object.freeze({
         realEstateGroup: 'photo assets/906-Real-Estate-Group_Logo-2024_Black.png',
         coldwellBanker: 'photo assets/CBlobo.png'
@@ -118,6 +126,11 @@
     const authSignupBtn = document.getElementById('authSignupBtn');
     const authLogoutBtn = document.getElementById('authLogoutBtn');
     const authStatusText = document.getElementById('authStatusText');
+    const usageSummary = document.getElementById('usageSummary');
+    const usageLimitGrid = document.getElementById('usageLimitGrid');
+    const usageResetText = document.getElementById('usageResetText');
+    const usageRefresh = document.getElementById('usageRefresh');
+    const selectedUsageHint = document.getElementById('selectedUsageHint');
 
     const attachmentState = {
         files: []
@@ -128,7 +141,10 @@
         currentReport: null,
         history: [],
         pollTimer: null,
-        user: null
+        user: null,
+        usageLimits: null,
+        usageLimitsLoading: false,
+        usageLimitsError: ''
     };
 
     const requestState = {
@@ -442,6 +458,200 @@
             : `<i class="fas fa-bolt"></i><span>${label}</span>`;
     }
 
+    function normalizeTierName(tier) {
+        return String(tier || '').trim().toLowerCase();
+    }
+
+    function normalizeModelName(model) {
+        return String(model || '').trim().replace(/^models\//i, '');
+    }
+
+    function getTierForModel(model = getSelectedReportsModel()) {
+        return REPORT_MODEL_TIERS[normalizeModelName(model)] || 'fast';
+    }
+
+    function getTierDisplay(tier) {
+        const normalizedTier = normalizeTierName(tier);
+        return REPORT_TIER_DISPLAY[normalizedTier] || {
+            label: normalizedTier ? normalizedTier.charAt(0).toUpperCase() + normalizedTier.slice(1) : 'Report',
+            icon: 'fa-chart-line',
+            model: ''
+        };
+    }
+
+    function asUsageNumber(value, fallback = 0) {
+        const number = Number(value);
+        return Number.isFinite(number) ? number : fallback;
+    }
+
+    function isUsageNumber(value) {
+        return typeof value === 'number' && Number.isFinite(value);
+    }
+
+    function normalizeUsageLimits(rawUsage) {
+        const usage = rawUsage?.usage || rawUsage || {};
+        const limits = Array.isArray(usage.limits) ? usage.limits : [];
+        return {
+            timeZone: usage.timeZone || '',
+            generatedAt: usage.generatedAt || null,
+            limits: limits.map((item) => {
+                const tier = normalizeTierName(item.tier);
+                const display = getTierDisplay(tier);
+                const limit = asUsageNumber(item.limit);
+                const used = asUsageNumber(item.used);
+                const remaining = Number.isFinite(Number(item.remaining))
+                    ? asUsageNumber(item.remaining)
+                    : Math.max(0, limit - used);
+                return {
+                    tier,
+                    label: item.label || display.label,
+                    model: item.model || display.model,
+                    limit,
+                    used,
+                    remaining: Math.max(0, remaining),
+                    resetAt: item.resetAt || item.windowEnd || null,
+                    windowStart: item.windowStart || null
+                };
+            })
+        };
+    }
+
+    function getUsageLimitsForRender() {
+        const usageLimits = appState.usageLimits?.limits || [];
+        const byTier = new Map(usageLimits.map((item) => [item.tier, item]));
+        return ['fast', 'smart'].map((tier) => {
+            const display = getTierDisplay(tier);
+            return byTier.get(tier) || {
+                tier,
+                label: display.label,
+                model: display.model,
+                limit: null,
+                used: null,
+                remaining: null,
+                resetAt: null
+            };
+        });
+    }
+
+    function formatUsageReset(value) {
+        const date = new Date(value);
+        if (!value || Number.isNaN(date.getTime())) return '';
+        return date.toLocaleString(undefined, {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit'
+        });
+    }
+
+    function usagePercent(item) {
+        const limit = Number(item.limit);
+        const used = Number(item.used);
+        if (!Number.isFinite(limit) || limit <= 0 || !Number.isFinite(used)) return 0;
+        return Math.min(100, Math.max(0, (used / limit) * 100));
+    }
+
+    function getSelectedUsageLimit() {
+        const selectedTier = getTierForModel();
+        return getUsageLimitsForRender().find((item) => item.tier === selectedTier) || null;
+    }
+
+    function renderUsageLimits() {
+        if (!usageLimitGrid) return;
+
+        const signedIn = Boolean(appState.user);
+        const loading = appState.usageLimitsLoading;
+        const limits = getUsageLimitsForRender();
+        usageLimitGrid.innerHTML = limits.map((item) => {
+            const display = getTierDisplay(item.tier);
+            const hasNumbers = signedIn && isUsageNumber(item.limit) && isUsageNumber(item.used) && isUsageNumber(item.remaining);
+            const remainingText = hasNumbers ? `${item.remaining} left` : (loading ? 'Loading' : 'Sign in');
+            const usedText = hasNumbers ? `${item.used} used` : (loading ? 'Checking usage' : 'Usage hidden');
+            const limitText = hasNumbers ? `${item.limit} weekly` : 'Weekly limit';
+            const percent = hasNumbers ? usagePercent(item).toFixed(1) : '0';
+            const selected = item.tier === getTierForModel();
+            const exhausted = hasNumbers && item.remaining <= 0;
+            return `
+                <div class="usage-limit-item${loading && !hasNumbers ? ' is-loading' : ''}${selected ? ' is-selected' : ''}${exhausted ? ' is-exhausted' : ''}" aria-label="${escapeAttribute(item.label)} usage">
+                    <div class="usage-limit-top">
+                        <span><i class="fas ${display.icon}"></i> ${escapeHtml(item.label || display.label)}</span>
+                        <strong>${escapeHtml(remainingText)}</strong>
+                    </div>
+                    <div class="usage-meter" aria-hidden="true"><span style="width:${percent}%"></span></div>
+                    <div class="usage-limit-meta">
+                        <span>${escapeHtml(usedText)}</span>
+                        <span>${escapeHtml(limitText)}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        if (usageSummary) {
+            usageSummary.classList.toggle('is-loading', loading);
+        }
+        if (usageRefresh) {
+            usageRefresh.disabled = loading || !signedIn;
+        }
+        if (usageResetText) {
+            if (!signedIn) {
+                usageResetText.textContent = 'Sign in to view weekly report limits and remaining usage.';
+            } else if (appState.usageLimitsError) {
+                usageResetText.textContent = appState.usageLimitsError;
+            } else if (loading && !appState.usageLimits) {
+                usageResetText.textContent = 'Checking current usage...';
+            } else {
+                const resetAt = limits.find((item) => item.resetAt)?.resetAt;
+                const resetLabel = formatUsageReset(resetAt);
+                usageResetText.textContent = resetLabel
+                    ? `Limits reset ${resetLabel}. Retries use one report; deleting history does not restore usage.`
+                    : 'Retries use one report; deleting history does not restore usage.';
+            }
+        }
+        if (selectedUsageHint) {
+            const selected = getSelectedUsageLimit();
+            if (!signedIn) {
+                selectedUsageHint.textContent = 'Sign in to view selected model usage.';
+            } else if (loading && (!selected || !isUsageNumber(selected.limit))) {
+                selectedUsageHint.textContent = 'Checking selected model usage...';
+            } else if (selected && isUsageNumber(selected.limit)) {
+                const resetLabel = formatUsageReset(selected.resetAt);
+                selectedUsageHint.textContent = `${selected.label}: ${selected.remaining} of ${selected.limit} reports remaining this week${resetLabel ? `; resets ${resetLabel}` : ''}.`;
+            } else {
+                selectedUsageHint.textContent = 'Usage limits are unavailable right now.';
+            }
+        }
+    }
+
+    async function refreshUsageLimits() {
+        if (!appState.user) {
+            appState.usageLimits = null;
+            appState.usageLimitsError = '';
+            appState.usageLimitsLoading = false;
+            renderUsageLimits();
+            return null;
+        }
+
+        appState.usageLimitsLoading = true;
+        appState.usageLimitsError = '';
+        renderUsageLimits();
+
+        try {
+            const data = await apiRequest('/api/reports/usage');
+            appState.usageLimits = normalizeUsageLimits(data.usage || data);
+            return appState.usageLimits;
+        } catch (error) {
+            if (error.status !== 401) {
+                console.warn('Failed to load usage limits.', error);
+                appState.usageLimitsError = 'Usage limits could not be refreshed.';
+            }
+            return null;
+        } finally {
+            appState.usageLimitsLoading = false;
+            renderUsageLimits();
+        }
+    }
+
     function toggleHidden(element, shouldHide) {
         if (!element) return;
         element.classList.toggle('hidden', shouldHide);
@@ -591,6 +801,7 @@
             historyToggle.disabled = !signedIn;
             historyToggle.classList.toggle('opacity-50', !signedIn);
         }
+        renderUsageLimits();
         if (signedIn) {
             hideAuthGate();
         } else {
@@ -610,6 +821,11 @@
             appState.user = null;
         }
         updateAuthUi();
+        if (appState.user) {
+            await refreshUsageLimits();
+        } else {
+            renderUsageLimits();
+        }
         return appState.user;
     }
 
@@ -694,7 +910,10 @@
         updateAuthUi();
         await syncUserSettingsAfterAuth(data.settings)
             .catch((error) => console.warn('Failed to sync user settings.', error));
-        await refreshHistoryList();
+        await Promise.all([
+            refreshUsageLimits(),
+            refreshHistoryList()
+        ]);
     }
 
     async function signInWithCredentials(credentials) {
@@ -822,6 +1041,9 @@
         appState.user = null;
         appState.history = [];
         appState.activeReportId = null;
+        appState.usageLimits = null;
+        appState.usageLimitsError = '';
+        appState.usageLimitsLoading = false;
         userSettingsChangedThisSession = false;
         lastPersistedUserSettingsSignature = null;
         if (userSettingsSaveTimer) {
@@ -832,6 +1054,7 @@
         stopPolling();
         setAuthGateMode('login');
         updateAuthUi();
+        renderUsageLimits();
         renderHistoryList([]);
         updateHistoryBadge(0);
         resetValuationForm();
@@ -1193,8 +1416,15 @@
             appState.activeReportId = report.id;
             safeStorageSet(ACTIVE_REPORT_STORAGE_KEY, report.id);
             applyReportToUi(report, { scroll: true });
-            await refreshHistoryList();
+            await Promise.all([
+                refreshUsageLimits(),
+                refreshHistoryList()
+            ]);
         } catch (error) {
+            if (error.status === 429) {
+                refreshUsageLimits()
+                    .catch((refreshError) => console.warn('Failed to refresh usage after quota error.', refreshError));
+            }
             alert(error.message || 'Failed to start report.');
             showFailedReport({
                 id: null,
@@ -1244,8 +1474,15 @@
             appState.activeReportId = report.id;
             safeStorageSet(ACTIVE_REPORT_STORAGE_KEY, report.id);
             applyReportToUi(report, { scroll: true });
-            await refreshHistoryList();
+            await Promise.all([
+                refreshUsageLimits(),
+                refreshHistoryList()
+            ]);
         } catch (error) {
+            if (error.status === 429) {
+                refreshUsageLimits()
+                    .catch((refreshError) => console.warn('Failed to refresh usage after quota error.', refreshError));
+            }
             alert(error.message || 'Failed to retry report.');
         }
     }
@@ -1794,6 +2031,10 @@
         settingsToggle?.setAttribute('aria-expanded', 'true');
         requestAnimationFrame(() => settingsModal.classList.add('is-open'));
         updateScrollLock();
+        if (appState.user) {
+            refreshUsageLimits()
+                .catch((error) => console.warn('Failed to refresh usage limits.', error));
+        }
         (appState.user ? settingsClose : authEmail)?.focus();
     }
 
@@ -1878,6 +2119,11 @@
         authPassword?.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') login();
         });
+        document.getElementById('modelSelect')?.addEventListener('change', renderUsageLimits);
+        usageRefresh?.addEventListener('click', () => {
+            refreshUsageLimits()
+                .catch((error) => console.warn('Failed to refresh usage limits.', error));
+        });
 
         historyToggle?.addEventListener('click', async () => {
             await refreshHistoryList();
@@ -1950,6 +2196,7 @@
     async function boot() {
         updateDownloadButtonState(false);
         setNewValuationVisibility(false);
+        renderUsageLimits();
         hydratePasswordResetFromUrl();
         applyStoredUserSettings();
         wireEvents();

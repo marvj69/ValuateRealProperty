@@ -5,6 +5,7 @@ import { buildReportPrompt } from './prompts.js';
 import { callGemini, withRetries } from './gemini.js';
 import {
   DEFAULT_REPORT_MODEL,
+  REPORT_MODEL_OPTIONS,
   getAllowedReportModels,
   getReportModelSelection
 } from './report-models.js';
@@ -180,6 +181,85 @@ function normalizeUsageLimitMetadata(row, payload) {
     used,
     remaining: Math.max(0, limit - used),
     resetAt: normalizeDate(row.quota_window_end)
+  };
+}
+
+export async function getReportUsageForUser(user) {
+  await ensureSchema();
+  const timeZone = getUsageLimitTimeZone();
+  const generatedAt = new Date().toISOString();
+
+  const limits = await Promise.all(REPORT_MODEL_OPTIONS.map(async (option) => {
+    const weeklyLimit = getWeeklyReportLimit(option.tier);
+    const { rows } = await sql`
+      WITH report_window AS (
+        SELECT
+          (date_trunc('week', now() AT TIME ZONE ${timeZone}) AT TIME ZONE ${timeZone}) AS window_start,
+          ((date_trunc('week', now() AT TIME ZONE ${timeZone}) + interval '1 week') AT TIME ZONE ${timeZone}) AS window_end
+      ),
+      ledger_usage AS (
+        SELECT COUNT(*)::int AS used
+        FROM (
+          SELECT event.id
+          FROM report_usage_events AS event
+          CROSS JOIN report_window AS quota_window
+          WHERE event.user_id = ${user.userId}
+            AND event.report_tier = ${option.tier}
+            AND event.window_start = quota_window.window_start
+
+          UNION ALL
+
+          SELECT job.id
+          FROM report_jobs AS job
+          CROSS JOIN report_window AS quota_window
+          WHERE job.user_id = ${user.userId}
+            AND job.created_at >= quota_window.window_start
+            AND job.created_at < quota_window.window_end
+            AND (
+              COALESCE(job.payload->>'modelTier', '') = ${option.tier}
+              OR regexp_replace(COALESCE(job.payload->>'model', ''), '^models/', '', 'i') = ${option.model}
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM report_usage_events AS existing_event
+              WHERE existing_event.report_job_id = job.id
+            )
+        ) AS usage_rows
+      ),
+      counter_usage AS (
+        SELECT counter.used
+        FROM report_usage_counters AS counter
+        CROSS JOIN report_window AS quota_window
+        WHERE counter.user_id = ${user.userId}
+          AND counter.report_tier = ${option.tier}
+          AND counter.window_start = quota_window.window_start
+        LIMIT 1
+      )
+      SELECT
+        GREATEST(COALESCE((SELECT used FROM counter_usage), 0), ledger_usage.used)::int AS used,
+        report_window.window_start,
+        report_window.window_end
+      FROM report_window
+      CROSS JOIN ledger_usage
+    `;
+    const row = rows[0] || {};
+    const used = Number(row.used) || 0;
+    return {
+      tier: option.tier,
+      label: option.label,
+      model: option.model,
+      limit: weeklyLimit,
+      used,
+      remaining: Math.max(0, weeklyLimit - used),
+      windowStart: normalizeDate(row.window_start),
+      resetAt: normalizeDate(row.window_end)
+    };
+  }));
+
+  return {
+    timeZone,
+    generatedAt,
+    limits
   };
 }
 

@@ -137,6 +137,7 @@ Choose between two analysis approaches:
 - `GET|PATCH /api/user/settings` - read or update the signed-in user's report preferences
 - `POST /api/reports` - create a report job, subject to weekly Fast/Smart usage limits
 - `GET /api/reports` - list the signed-in user's reports
+- `GET /api/reports/usage` - read the signed-in user's Fast/Smart weekly limits, used counts, remaining counts, and reset time
 - `GET /api/reports/:id` - read one owned report
 - `DELETE /api/reports/:id` - delete one owned report
 - `POST /api/reports/:id/retry` - retry a failed or queued report when appropriate
