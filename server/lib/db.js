@@ -84,6 +84,45 @@ async function createSchema() {
     CREATE INDEX IF NOT EXISTS report_jobs_status_updated_idx
     ON report_jobs (status, updated_at ASC)
   `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS report_usage_counters (
+      user_id TEXT NOT NULL,
+      user_email TEXT NOT NULL,
+      report_tier TEXT NOT NULL CHECK (report_tier IN ('fast', 'smart')),
+      window_start TIMESTAMPTZ NOT NULL,
+      window_end TIMESTAMPTZ NOT NULL,
+      used INTEGER NOT NULL DEFAULT 0 CHECK (used >= 0),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (user_id, report_tier, window_start)
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS report_usage_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      user_email TEXT NOT NULL,
+      report_job_id TEXT,
+      report_tier TEXT NOT NULL CHECK (report_tier IN ('fast', 'smart')),
+      model TEXT NOT NULL,
+      event_type TEXT NOT NULL DEFAULT 'created' CHECK (event_type IN ('created', 'retry')),
+      window_start TIMESTAMPTZ NOT NULL,
+      window_end TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS report_usage_events_user_tier_window_idx
+    ON report_usage_events (user_id, report_tier, window_start, created_at DESC)
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS report_usage_events_job_idx
+    ON report_usage_events (report_job_id)
+  `;
 }
 
 export { sql };

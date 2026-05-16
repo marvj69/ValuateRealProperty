@@ -123,7 +123,7 @@ Choose between two analysis approaches:
 - **Backend**: Vercel API Functions under `api/`
 - **Async Processing**: `POST /api/reports` creates a queued job, returns a report ID, and starts backend processing with `waitUntil`; `/api/worker` can process queued/stale jobs on a cron schedule
 - **AI Integration**: Google Gemini API (v1beta) with web grounding, called only from backend functions
-- **Storage**: Postgres tables `app_users` and `report_jobs`, with reports scoped by authenticated `user_id`
+- **Storage**: Postgres tables `app_users`, `report_jobs`, `report_usage_counters`, and `report_usage_events`, with reports scoped by authenticated `user_id`
 - **Service Worker**: Static/offline asset caching only
 - **PWA**: Installable Progressive Web App with manifest
 
@@ -135,7 +135,7 @@ Choose between two analysis approaches:
 - `POST /api/auth/logout` - clear the session
 - `GET /api/auth/me` - inspect current auth state
 - `GET|PATCH /api/user/settings` - read or update the signed-in user's report preferences
-- `POST /api/reports` - create a report job
+- `POST /api/reports` - create a report job, subject to weekly Fast/Smart usage limits
 - `GET /api/reports` - list the signed-in user's reports
 - `GET /api/reports/:id` - read one owned report
 - `DELETE /api/reports/:id` - delete one owned report
@@ -147,6 +147,10 @@ Choose between two analysis approaches:
 - `AUTH_SESSION_SECRET`: long random string used to sign sessions
 - `CRON_SECRET`: bearer token for the scheduled worker endpoint
 - `REPORT_MODEL`: optional default Gemini model
+- `FAST_REPORT_WEEKLY_LIMIT`: optional weekly Fast report limit per user, default `5`
+- `SMART_REPORT_WEEKLY_LIMIT`: optional weekly Smart report limit per user, default `5`
+- `REPORT_USAGE_TIME_ZONE`: optional IANA time zone for weekly quota windows, default `America/Detroit`
+- `MAX_JSON_BODY_CHARS`: optional maximum JSON request body size, default `5500000`
 - `APP_BASE_URL`: optional absolute app URL used to build password reset links
 - `PASSWORD_RESET_DEV_MODE`: optional local-development switch that returns reset tokens in the API response
 - `PASSWORD_RESET_TOKEN_TTL_MINUTES`: optional reset-token expiration window, default `30`
@@ -160,8 +164,10 @@ Password reset tokens are stored hashed in Postgres and are single-use. In produ
 Note: attachments are submitted directly to the report creation API and are limited to small PDFs/images. For large documents, add Vercel Blob or another object store and persist file URLs in the report inputs.
 
 ### Supported Models
-- Fast (`gemini-flash-lite-latest`) - Recommended
-- Smart (`gemini-flash-latest`)
+- Fast (`gemini-flash-lite-latest`) - 5 reports per user per week by default
+- Smart (`gemini-flash-latest`) - 5 reports per user per week by default
+
+Usage limits are enforced server-side with an atomic Postgres quota counter and durable usage ledger. Deleting report history does not reset quota, retrying a report consumes quota, and direct API calls are restricted to the supported Fast/Smart model IDs.
 
 ### Browser Compatibility
 - Chrome/Edge (recommended)

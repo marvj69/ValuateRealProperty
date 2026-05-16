@@ -1,4 +1,4 @@
-import { DEFAULT_REPORT_MODEL } from './prompts.js';
+import { DEFAULT_REPORT_MODEL } from './report-models.js';
 
 export function normalizeModelName(model) {
   const selected = model || process.env.REPORT_MODEL || DEFAULT_REPORT_MODEL;

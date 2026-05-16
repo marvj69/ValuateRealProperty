@@ -1,8 +1,13 @@
 import crypto from 'node:crypto';
 import { ensureSchema, sql } from './db.js';
 import { HttpError } from './http.js';
-import { DEFAULT_REPORT_MODEL, buildReportPrompt } from './prompts.js';
-import { callGemini, normalizeModelName, withRetries } from './gemini.js';
+import { buildReportPrompt } from './prompts.js';
+import { callGemini, withRetries } from './gemini.js';
+import {
+  DEFAULT_REPORT_MODEL,
+  getAllowedReportModels,
+  getReportModelSelection
+} from './report-models.js';
 import { extractValuations, generateMergedReport } from './valuation.js';
 
 const MAX_REPORT_COUNT = 16;
@@ -11,6 +16,14 @@ const MAX_ATTACHMENTS = 8;
 const MAX_ATTACHMENT_BASE64_CHARS = 4_000_000;
 const PROCESSING_STALE_MINUTES = 10;
 const WORKER_CONCURRENCY = 4;
+const DEFAULT_WEEKLY_REPORT_LIMIT = 5;
+const MAX_CONFIGURED_WEEKLY_REPORT_LIMIT = 1000;
+const DEFAULT_USAGE_LIMIT_TIME_ZONE = 'America/Detroit';
+
+const WEEKLY_LIMIT_ENV_KEYS = Object.freeze({
+  fast: 'FAST_REPORT_WEEKLY_LIMIT',
+  smart: 'SMART_REPORT_WEEKLY_LIMIT'
+});
 
 function asString(value, maxLength = 20000) {
   return String(value || '').trim().slice(0, maxLength);
@@ -25,6 +38,65 @@ function asReportCount(value) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return DEFAULT_REPORT_COUNT;
   return Math.min(MAX_REPORT_COUNT, Math.max(1, parsed));
+}
+
+function asReportId(value) {
+  const id = asString(value, 100);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    throw new HttpError(400, 'A valid report ID is required.');
+  }
+  return id;
+}
+
+function getUsageLimitTimeZone() {
+  return process.env.REPORT_USAGE_TIME_ZONE || DEFAULT_USAGE_LIMIT_TIME_ZONE;
+}
+
+function getWeeklyReportLimit(tier) {
+  const configured = process.env[WEEKLY_LIMIT_ENV_KEYS[tier]] || process.env.REPORT_WEEKLY_LIMIT;
+  const parsed = Number.parseInt(configured || String(DEFAULT_WEEKLY_REPORT_LIMIT), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_WEEKLY_REPORT_LIMIT;
+  }
+  return Math.min(MAX_CONFIGURED_WEEKLY_REPORT_LIMIT, parsed);
+}
+
+function resolveReportModel(model) {
+  const selection = getReportModelSelection(model || process.env.REPORT_MODEL || DEFAULT_REPORT_MODEL);
+  if (!selection) {
+    throw new HttpError(400, 'Unsupported AI model. Choose Fast or Smart.', {
+      field: 'model',
+      allowedValues: getAllowedReportModels()
+    });
+  }
+  return selection;
+}
+
+function secondsUntil(value) {
+  const timestamp = new Date(normalizeDate(value)).getTime();
+  if (!Number.isFinite(timestamp)) return 60;
+  return Math.max(1, Math.ceil((timestamp - Date.now()) / 1000));
+}
+
+function weeklyLimitExceededError({ tier, label, used, limit, resetAt }) {
+  const safeUsed = Number.isFinite(Number(used)) ? Number(used) : limit;
+  const resetIso = normalizeDate(resetAt);
+  return new HttpError(
+    429,
+    `Weekly ${label} report limit reached (${safeUsed}/${limit}). Try again after ${resetIso}.`,
+    {
+      code: 'weekly_report_limit_exceeded',
+      tier,
+      label,
+      used: safeUsed,
+      limit,
+      remaining: 0,
+      resetAt: resetIso
+    },
+    {
+      'Retry-After': String(secondsUntil(resetIso))
+    }
+  );
 }
 
 function sanitizeAttachments(attachments) {
@@ -70,7 +142,7 @@ export function sanitizeReportInput(input = {}) {
     ? input.reportAudience
     : 'seller';
   const reportCount = asReportCount(input.reportCount);
-  const model = normalizeModelName(input.model || process.env.REPORT_MODEL || DEFAULT_REPORT_MODEL);
+  const modelSelection = resolveReportModel(input.model);
 
   return {
     propertyAddress,
@@ -80,7 +152,9 @@ export function sanitizeReportInput(input = {}) {
     promptKey,
     reportCount,
     enableSearch: asBoolean(input.enableSearch, true),
-    model,
+    model: modelSelection.model,
+    modelTier: modelSelection.tier,
+    modelLabel: modelSelection.label,
     attachments
   };
 }
@@ -91,6 +165,22 @@ function jsonParam(value) {
 
 function normalizeDate(value) {
   return value?.toISOString?.() || value || null;
+}
+
+function normalizeUsageLimitMetadata(row, payload) {
+  if (row.quota_limit === undefined || row.quota_limit === null) return null;
+  const usedBeforeRequest = Number(row.quota_used) || 0;
+  const limit = Number(row.quota_limit) || 0;
+  const reserved = Number(row.quota_reserved) || 0;
+  const used = Math.min(limit, usedBeforeRequest + reserved);
+  return {
+    tier: payload.modelTier || row.quota_tier || null,
+    label: payload.modelLabel || null,
+    limit,
+    used,
+    remaining: Math.max(0, limit - used),
+    resetAt: normalizeDate(row.quota_window_end)
+  };
 }
 
 export function normalizeReportRow(row, { includePayload = false, includeReports = false } = {}) {
@@ -114,7 +204,10 @@ export function normalizeReportRow(row, { includePayload = false, includeReports
   const metadata = {
     reportCount: row.report_count,
     progress: row.progress || {},
-    attempts: row.attempts
+    attempts: row.attempts,
+    model: payload.model || null,
+    modelTier: payload.modelTier || null,
+    usageLimit: normalizeUsageLimitMetadata(row, payload)
   };
 
   return {
@@ -143,33 +236,149 @@ export async function createReportJob(user, input) {
   await ensureSchema();
   const payload = sanitizeReportInput(input);
   const id = crypto.randomUUID();
+  const usageEventId = crypto.randomUUID();
   const progress = { total: payload.reportCount, completed: 0, phase: 'queued' };
+  const weeklyLimit = getWeeklyReportLimit(payload.modelTier);
+  const timeZone = getUsageLimitTimeZone();
 
   const { rows } = await sql`
-    INSERT INTO report_jobs (
-      id,
-      user_id,
-      user_email,
-      status,
-      payload,
-      report_count,
-      reports,
-      progress
+    WITH report_window AS (
+      SELECT
+        (date_trunc('week', now() AT TIME ZONE ${timeZone}) AT TIME ZONE ${timeZone}) AS window_start,
+        ((date_trunc('week', now() AT TIME ZONE ${timeZone}) + interval '1 week') AT TIME ZONE ${timeZone}) AS window_end
+    ),
+    existing_usage AS (
+      SELECT COUNT(*)::int AS used
+      FROM (
+        SELECT event.id
+        FROM report_usage_events AS event
+        CROSS JOIN report_window AS quota_window
+        WHERE event.user_id = ${user.userId}
+          AND event.report_tier = ${payload.modelTier}
+          AND event.window_start = quota_window.window_start
+
+        UNION ALL
+
+        SELECT job.id
+        FROM report_jobs AS job
+        CROSS JOIN report_window AS quota_window
+        WHERE job.user_id = ${user.userId}
+          AND job.created_at >= quota_window.window_start
+          AND job.created_at < quota_window.window_end
+          AND (
+            COALESCE(job.payload->>'modelTier', '') = ${payload.modelTier}
+            OR regexp_replace(COALESCE(job.payload->>'model', ''), '^models/', '', 'i') = ${payload.model}
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM report_usage_events AS existing_event
+            WHERE existing_event.report_job_id = job.id
+          )
+      ) AS usage_rows
+    ),
+    quota_counter AS (
+      INSERT INTO report_usage_counters (
+        user_id,
+        user_email,
+        report_tier,
+        window_start,
+        window_end,
+        used
+      )
+      SELECT
+        ${user.userId},
+        ${user.email},
+        ${payload.modelTier},
+        quota_window.window_start,
+        quota_window.window_end,
+        existing_usage.used + 1
+      FROM report_window AS quota_window
+      CROSS JOIN existing_usage
+      WHERE existing_usage.used < ${weeklyLimit}
+        AND ${weeklyLimit} > 0
+      ON CONFLICT (user_id, report_tier, window_start)
+      DO UPDATE SET
+        user_email = EXCLUDED.user_email,
+        window_end = EXCLUDED.window_end,
+        used = GREATEST(report_usage_counters.used, EXCLUDED.used - 1) + 1,
+        updated_at = now()
+      WHERE GREATEST(report_usage_counters.used, EXCLUDED.used - 1) < ${weeklyLimit}
+      RETURNING used, window_start, window_end
+    ),
+    inserted_report AS (
+      INSERT INTO report_jobs (
+        id,
+        user_id,
+        user_email,
+        status,
+        payload,
+        report_count,
+        reports,
+        progress
+      )
+      SELECT
+        ${id},
+        ${user.userId},
+        ${user.email},
+        'queued',
+        ${jsonParam(payload)}::jsonb,
+        ${payload.reportCount},
+        '[]'::jsonb,
+        ${jsonParam(progress)}::jsonb
+      FROM quota_counter
+      RETURNING *
+    ),
+    inserted_usage AS (
+      INSERT INTO report_usage_events (
+        id,
+        user_id,
+        user_email,
+        report_job_id,
+        report_tier,
+        model,
+        event_type,
+        window_start,
+        window_end
+      )
+      SELECT
+        ${usageEventId},
+        ${user.userId},
+        ${user.email},
+        inserted_report.id,
+        ${payload.modelTier},
+        ${payload.model},
+        'created',
+        quota_window.window_start,
+        quota_window.window_end
+      FROM inserted_report
+      CROSS JOIN report_window AS quota_window
+      RETURNING id
     )
-    VALUES (
-      ${id},
-      ${user.userId},
-      ${user.email},
-      'queued',
-      ${jsonParam(payload)}::jsonb,
-      ${payload.reportCount},
-      '[]'::jsonb,
-      ${jsonParam(progress)}::jsonb
-    )
-    RETURNING *
+    SELECT
+      inserted_report.*,
+      COALESCE(quota_counter.used - 1, ${weeklyLimit})::int AS quota_used,
+      ${weeklyLimit}::int AS quota_limit,
+      ${payload.modelTier} AS quota_tier,
+      quota_window.window_start AS quota_window_start,
+      quota_window.window_end AS quota_window_end,
+      (SELECT COUNT(*)::int FROM inserted_usage) AS quota_reserved
+    FROM report_window AS quota_window
+    LEFT JOIN quota_counter ON TRUE
+    LEFT JOIN inserted_report ON TRUE
   `;
 
-  return normalizeReportRow(rows[0], { includePayload: true, includeReports: true });
+  const row = rows[0];
+  if (!row?.id) {
+    throw weeklyLimitExceededError({
+      tier: payload.modelTier,
+      label: payload.modelLabel,
+      used: row?.quota_used || weeklyLimit,
+      limit: weeklyLimit,
+      resetAt: row?.quota_window_end
+    });
+  }
+
+  return normalizeReportRow(row, { includePayload: true, includeReports: true });
 }
 
 export async function listReportsForUser(user) {
@@ -186,10 +395,11 @@ export async function listReportsForUser(user) {
 
 export async function getReportForUser(user, id) {
   await ensureSchema();
+  const reportId = asReportId(id);
   const { rows } = await sql`
     SELECT *
     FROM report_jobs
-    WHERE id = ${id} AND user_id = ${user.userId}
+    WHERE id = ${reportId} AND user_id = ${user.userId}
     LIMIT 1
   `;
   if (!rows[0]) {
@@ -200,9 +410,10 @@ export async function getReportForUser(user, id) {
 
 export async function deleteReportForUser(user, id) {
   await ensureSchema();
+  const reportId = asReportId(id);
   const { rows } = await sql`
     DELETE FROM report_jobs
-    WHERE id = ${id} AND user_id = ${user.userId}
+    WHERE id = ${reportId} AND user_id = ${user.userId}
     RETURNING id
   `;
   if (!rows[0]) {
@@ -213,31 +424,182 @@ export async function deleteReportForUser(user, id) {
 
 export async function retryReportForUser(user, id) {
   await ensureSchema();
-  const progress = { total: DEFAULT_REPORT_COUNT, completed: 0, phase: 'queued' };
-  const { rows } = await sql`
-    UPDATE report_jobs
-    SET
-      status = 'queued',
-      reports = '[]'::jsonb,
-      final_report = NULL,
-      progress = jsonb_set(${jsonParam(progress)}::jsonb, '{total}', to_jsonb(report_count)),
-      error = NULL,
-      started_at = NULL,
-      completed_at = NULL,
-      updated_at = now()
-    WHERE id = ${id}
+  const reportId = asReportId(id);
+  const { rows: existingRows } = await sql`
+    SELECT *
+    FROM report_jobs
+    WHERE id = ${reportId}
       AND user_id = ${user.userId}
-      AND status <> 'processing'
-    RETURNING *
+    LIMIT 1
   `;
-  if (!rows[0]) {
-    const existing = await getReportForUser(user, id);
-    if (existing.status === 'processing') {
-      throw new HttpError(409, 'Report is already processing.');
-    }
+  const existing = existingRows[0];
+  if (!existing) {
     throw new HttpError(404, 'Report not found.');
   }
-  return normalizeReportRow(rows[0], { includePayload: true, includeReports: true });
+  if (existing.status === 'processing') {
+    throw new HttpError(409, 'Report is already processing.');
+  }
+
+  const payload = sanitizeReportInput(existing.payload || {});
+  const progress = { total: payload.reportCount, completed: 0, phase: 'queued' };
+  const weeklyLimit = getWeeklyReportLimit(payload.modelTier);
+  const timeZone = getUsageLimitTimeZone();
+  const usageEventId = crypto.randomUUID();
+
+  const { rows } = await sql`
+    WITH report_window AS (
+      SELECT
+        (date_trunc('week', now() AT TIME ZONE ${timeZone}) AT TIME ZONE ${timeZone}) AS window_start,
+        ((date_trunc('week', now() AT TIME ZONE ${timeZone}) + interval '1 week') AT TIME ZONE ${timeZone}) AS window_end
+    ),
+    report_state AS (
+      SELECT status
+      FROM report_jobs
+      WHERE id = ${reportId}
+        AND user_id = ${user.userId}
+      LIMIT 1
+      FOR UPDATE
+    ),
+    existing_usage AS (
+      SELECT COUNT(*)::int AS used
+      FROM (
+        SELECT event.id
+        FROM report_usage_events AS event
+        CROSS JOIN report_window AS quota_window
+        WHERE event.user_id = ${user.userId}
+          AND event.report_tier = ${payload.modelTier}
+          AND event.window_start = quota_window.window_start
+
+        UNION ALL
+
+        SELECT job.id
+        FROM report_jobs AS job
+        CROSS JOIN report_window AS quota_window
+        WHERE job.user_id = ${user.userId}
+          AND job.created_at >= quota_window.window_start
+          AND job.created_at < quota_window.window_end
+          AND (
+            COALESCE(job.payload->>'modelTier', '') = ${payload.modelTier}
+            OR regexp_replace(COALESCE(job.payload->>'model', ''), '^models/', '', 'i') = ${payload.model}
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM report_usage_events AS existing_event
+            WHERE existing_event.report_job_id = job.id
+          )
+      ) AS usage_rows
+    ),
+    quota_counter AS (
+      INSERT INTO report_usage_counters (
+        user_id,
+        user_email,
+        report_tier,
+        window_start,
+        window_end,
+        used
+      )
+      SELECT
+        ${user.userId},
+        ${user.email},
+        ${payload.modelTier},
+        quota_window.window_start,
+        quota_window.window_end,
+        existing_usage.used + 1
+      FROM report_window AS quota_window
+      CROSS JOIN existing_usage
+      WHERE existing_usage.used < ${weeklyLimit}
+        AND ${weeklyLimit} > 0
+        AND EXISTS (
+          SELECT 1
+          FROM report_state
+          WHERE status <> 'processing'
+        )
+      ON CONFLICT (user_id, report_tier, window_start)
+      DO UPDATE SET
+        user_email = EXCLUDED.user_email,
+        window_end = EXCLUDED.window_end,
+        used = GREATEST(report_usage_counters.used, EXCLUDED.used - 1) + 1,
+        updated_at = now()
+      WHERE GREATEST(report_usage_counters.used, EXCLUDED.used - 1) < ${weeklyLimit}
+      RETURNING used, window_start, window_end
+    ),
+    updated_report AS (
+      UPDATE report_jobs
+      SET
+        status = 'queued',
+        payload = ${jsonParam(payload)}::jsonb,
+        report_count = ${payload.reportCount},
+        reports = '[]'::jsonb,
+        final_report = NULL,
+        progress = ${jsonParam(progress)}::jsonb,
+        error = NULL,
+        started_at = NULL,
+        completed_at = NULL,
+        updated_at = now()
+      WHERE id = ${reportId}
+        AND user_id = ${user.userId}
+        AND status <> 'processing'
+        AND EXISTS (SELECT 1 FROM quota_counter)
+      RETURNING *
+    ),
+    inserted_usage AS (
+      INSERT INTO report_usage_events (
+        id,
+        user_id,
+        user_email,
+        report_job_id,
+        report_tier,
+        model,
+        event_type,
+        window_start,
+        window_end
+      )
+      SELECT
+        ${usageEventId},
+        ${user.userId},
+        ${user.email},
+        updated_report.id,
+        ${payload.modelTier},
+        ${payload.model},
+        'retry',
+        quota_window.window_start,
+        quota_window.window_end
+      FROM updated_report
+      CROSS JOIN report_window AS quota_window
+      RETURNING id
+    )
+    SELECT
+      updated_report.*,
+      COALESCE(quota_counter.used - 1, ${weeklyLimit})::int AS quota_used,
+      ${weeklyLimit}::int AS quota_limit,
+      ${payload.modelTier} AS quota_tier,
+      quota_window.window_start AS quota_window_start,
+      quota_window.window_end AS quota_window_end,
+      (SELECT COUNT(*)::int FROM inserted_usage) AS quota_reserved,
+      (SELECT status FROM report_state) AS existing_status
+    FROM report_window AS quota_window
+    LEFT JOIN quota_counter ON TRUE
+    LEFT JOIN updated_report ON TRUE
+  `;
+
+  const row = rows[0];
+  if (!row?.id) {
+    if (!row?.existing_status) {
+      throw new HttpError(404, 'Report not found.');
+    }
+    if (row.existing_status === 'processing') {
+      throw new HttpError(409, 'Report is already processing.');
+    }
+    throw weeklyLimitExceededError({
+      tier: payload.modelTier,
+      label: payload.modelLabel,
+      used: row?.quota_used || weeklyLimit,
+      limit: weeklyLimit,
+      resetAt: row?.quota_window_end
+    });
+  }
+
+  return normalizeReportRow(row, { includePayload: true, includeReports: true });
 }
 
 async function claimReportById(id) {
@@ -381,13 +743,17 @@ async function runPool(items, concurrency, worker) {
 }
 
 async function processClaimedReport(row) {
-  const payload = sanitizeReportInput(row.payload || {});
-  const prompt = buildReportPrompt(payload);
-  const reportCount = payload.reportCount;
-  const reports = Array.from({ length: reportCount }, () => null);
+  let payload = null;
+  let reportCount = Number(row.report_count) || DEFAULT_REPORT_COUNT;
+  let reports = [];
   let completed = 0;
 
   try {
+    payload = sanitizeReportInput(row.payload || {});
+    const prompt = buildReportPrompt(payload);
+    reportCount = payload.reportCount;
+    reports = Array.from({ length: reportCount }, () => null);
+
     await runPool(
       Array.from({ length: reportCount }, (_, index) => index),
       WORKER_CONCURRENCY,

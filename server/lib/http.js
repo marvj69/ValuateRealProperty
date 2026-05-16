@@ -1,9 +1,28 @@
 export class HttpError extends Error {
-  constructor(status, message, details = null) {
+  constructor(status, message, details = null, headers = {}) {
     super(message);
     this.name = 'HttpError';
     this.status = status;
     this.details = details;
+    this.headers = headers;
+  }
+}
+
+const DEFAULT_MAX_JSON_BODY_CHARS = 5_500_000;
+
+function getMaxJsonBodyChars() {
+  const configured = Number.parseInt(
+    process.env.MAX_JSON_BODY_CHARS || String(DEFAULT_MAX_JSON_BODY_CHARS),
+    10
+  );
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_MAX_JSON_BODY_CHARS;
+}
+
+function assertJsonBodySize(raw) {
+  if (String(raw || '').length > getMaxJsonBodyChars()) {
+    throw new HttpError(413, 'Request body is too large.');
   }
 }
 
@@ -32,13 +51,23 @@ export async function readJson(req) {
       ? req.body.toString('utf8')
       : await new Promise((resolve, reject) => {
           let body = '';
+          let rejected = false;
           req.setEncoding('utf8');
           req.on('data', (chunk) => {
+            if (rejected) return;
             body += chunk;
+            if (body.length > getMaxJsonBodyChars()) {
+              rejected = true;
+              reject(new HttpError(413, 'Request body is too large.'));
+            }
           });
-          req.on('end', () => resolve(body));
+          req.on('end', () => {
+            if (!rejected) resolve(body);
+          });
           req.on('error', reject);
         });
+
+  assertJsonBodySize(raw);
 
   if (!raw.trim()) return {};
 
@@ -60,7 +89,7 @@ export function handleError(res, error) {
   if (status >= 500) {
     console.error(error);
   }
-  json(res, status, body);
+  json(res, status, body, error?.headers || {});
 }
 
 export function firstQueryValue(value) {
