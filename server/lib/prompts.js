@@ -124,31 +124,82 @@ export function buildReportPrompt(input) {
     .replace('{{REPORT_AUDIENCE}}', input.reportAudience || 'seller');
 }
 
-export function buildValidationPrompt(reportsText) {
-  return `You are a data verification specialist focused on real estate comps. Extract all comparable sales and active/pending listings from the reports below and verify them.
+export function buildValidationPrompt(reportsText, { attempt = 1, previousFailure = '' } = {}) {
+  const retryNote = previousFailure
+    ? `\nPrevious validation attempt ${attempt - 1} failed because: ${previousFailure}\nCorrect that problem in this attempt.\n`
+    : '';
+
+  return `You are a data verification specialist focused on real estate comps. Extract all comparable sales and active/pending listings from the reports below and verify them with web-grounded evidence.${retryNote}
 
 Verification steps:
 - Confirm each address exists and appears to be a real property.
-- Verify price, date, beds, baths, SqFt, year built, lot size where possible using reputable public sources.
-- If data conflicts, choose the most credible source and note the discrepancy.
-- If you cannot verify an address or at least price plus date, exclude it.
-
-Output format:
-## Validated Comparable Sales
-| Address | Sale Date | Sale Price | Beds | Baths | SqFt | Year Built | Lot Size | Sources | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-
-## Validated Active/Pending Listings
-| Address | List/Pending Date | List Price | Beds | Baths | SqFt | Year Built | Lot Size | Sources | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-
-## Excluded/Unverified
-- Address (reason)
+- Verify status, price, date, beds, baths, SqFt, year built, lot size, and MLS number where possible using reputable public sources.
+- For closed sales, verify at minimum address, sale price, sale date, and at least one source URL.
+- For active/pending listings, verify at minimum address, current status, list/pending price, list/pending date when available, and at least one source URL.
+- If data conflicts, choose the most credible source and explain the conflict.
+- If a comp does not meet the minimum evidence standard, put it in rejectedComparables instead of verified arrays.
 
 Rules:
 - Do not invent new comps outside the reports.
 - Only correct obvious address errors if a verified match is found.
 - Be conservative when in doubt.
+- Return ONLY valid JSON. Do not include Markdown fences, prose, or tables.
+- Source URLs must be full URLs. Do not use generic source names as sourceUrls.
+
+JSON shape:
+{
+  "verifiedComparableSales": [
+    {
+      "address": "Full property address",
+      "saleDate": "YYYY-MM-DD or source-stated date",
+      "salePrice": "$000,000",
+      "beds": "source-stated value or unknown",
+      "baths": "source-stated value or unknown",
+      "sqft": "source-stated value or unknown",
+      "yearBuilt": "source-stated value or unknown",
+      "lotSize": "source-stated value or unknown",
+      "mlsNumber": "source-stated MLS number or unknown",
+      "sourceUrls": ["https://..."],
+      "sourceSummary": "Brief source names and what they confirmed",
+      "notes": "Why this is usable and any limitations"
+    }
+  ],
+  "verifiedActivePendingListings": [
+    {
+      "address": "Full property address",
+      "status": "Active or Pending",
+      "listOrPendingDate": "YYYY-MM-DD or source-stated date",
+      "listPrice": "$000,000",
+      "beds": "source-stated value or unknown",
+      "baths": "source-stated value or unknown",
+      "sqft": "source-stated value or unknown",
+      "yearBuilt": "source-stated value or unknown",
+      "lotSize": "source-stated value or unknown",
+      "mlsNumber": "source-stated MLS number or unknown",
+      "sourceUrls": ["https://..."],
+      "sourceSummary": "Brief source names and what they confirmed",
+      "notes": "Why this is usable and any limitations"
+    }
+  ],
+  "conflictedComparables": [
+    {
+      "address": "Address",
+      "category": "sale | active | pending",
+      "reason": "What conflicts and why it is not client-report-ready",
+      "sourceUrls": ["https://..."]
+    }
+  ],
+  "rejectedComparables": [
+    {
+      "address": "Address",
+      "category": "sale | active | pending",
+      "reason": "Why it failed verification"
+    }
+  ],
+  "validationNotes": [
+    "Brief notes about source limitations or market coverage"
+  ]
+}
 
 Reports:
 ${reportsText}`;
@@ -160,6 +211,12 @@ export function buildFinalReportPrompt({ reportsText, validatedCompsContent, rep
 Write as the final client deliverable. Do not mention drafts, internal reports, source reports, model output, consensus, reconciliation, validation, or workflow.
 
 Use only the evidence provided. Do not invent property facts, comps, prices, dates, MLS details, public-record references, or market statistics. Preserve available citations and source identifiers. If evidence is missing, conflicting, weak, or contains internal/error text, state the limitation professionally in Risks, Assumptions & Limitations.
+
+Comparable evidence gate:
+- The "Verified Comparable Sales & Listings" section is the only approved source for comparable sales, active listings, and pending listings.
+- Do not introduce, restore, cite, or table any comparable sale/listing from Internal Research Materials unless it also appears in "Verified Comparable Sales & Listings".
+- If a verified sales or active/pending category is empty, say verified evidence was not available for that category rather than filling the table from unverified materials.
+- Treat rejected or conflicted comparables as unusable for the client-facing comp tables.
 
 Evidence priorities:
 - Anchor value to verified comparable sales/listings.
@@ -218,7 +275,7 @@ State data gaps, unverified facts, inspection limits, source conflicts, weak evi
 Verified Comparable Sales & Listings:
 ${validatedCompsContent}
 
-Internal Research Materials:
+Internal Research Materials (not approved for comparable sales/listing tables; use only for subject facts, market context, and non-comp reasoning):
 ${reportsText}`;
 }
 

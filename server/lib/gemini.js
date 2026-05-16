@@ -23,7 +23,8 @@ export async function callGemini({
   index = 0,
   attachments = [],
   extraTools = [],
-  maxOutputTokens = 65536
+  maxOutputTokens = 65536,
+  temperature = null
 }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -43,8 +44,12 @@ export async function callGemini({
     });
   }
 
+  const resolvedTemperature = Number.isFinite(temperature)
+    ? Math.min(1.95, Math.max(0, temperature))
+    : Math.min(1.95, 1 + index * 0.05);
+
   const generationConfig = {
-    temperature: Math.min(1.95, 1 + index * 0.05),
+    temperature: resolvedTemperature,
     topP: 0.95,
     topK: 40,
     maxOutputTokens

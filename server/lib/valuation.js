@@ -11,6 +11,8 @@ import { callGemini } from './gemini.js';
 const COMPLIANCE_REVIEW_MODEL = 'gemini-flash-lite-latest';
 const COMPLIANCE_REVISION_MODEL = 'gemini-3-flash-preview';
 const MAX_COMPLIANCE_REREVIEW_ROUNDS = 2;
+const MAX_COMP_VALIDATION_ATTEMPTS = 3;
+const MIN_VERIFIED_COMP_COUNT = 1;
 
 function parseNumber(value) {
   if (value === null || value === undefined) return null;
@@ -72,15 +74,251 @@ export function mergeValueRange(valuations, valueRangeOverride) {
   };
 }
 
+function normalizeText(value, fallback = 'unknown') {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  return text || fallback;
+}
+
+function normalizeSourceUrls(value) {
+  const rawSources = Array.isArray(value) ? value : [value];
+  const sourceText = rawSources
+    .map((source) => {
+      if (source && typeof source === 'object') {
+        return source.url || source.href || source.link || source.sourceUrl || JSON.stringify(source);
+      }
+      return source;
+    })
+    .map((source) => String(source ?? ''))
+    .join('\n');
+
+  const urlMatches = sourceText.match(/https?:\/\/[^\s)\]}>,|"]+/gi) || [];
+
+  return [...new Set(urlMatches.map((url) => url.trim()))];
+}
+
+function firstArrayValue(source, keys) {
+  for (const key of keys) {
+    if (Array.isArray(source?.[key])) return source[key];
+  }
+  return [];
+}
+
+function normalizeComparableSale(record = {}) {
+  const sourceUrls = normalizeSourceUrls(record.sourceUrls ?? record.sources ?? record.urls ?? record.citations);
+  return {
+    address: normalizeText(record.address, ''),
+    saleDate: normalizeText(record.saleDate ?? record.soldDate ?? record.closeDate ?? record.date, ''),
+    salePrice: normalizeText(record.salePrice ?? record.soldPrice ?? record.price, ''),
+    beds: normalizeText(record.beds ?? record.bedrooms),
+    baths: normalizeText(record.baths ?? record.bathrooms),
+    sqft: normalizeText(record.sqft ?? record.squareFeet ?? record.livingArea),
+    yearBuilt: normalizeText(record.yearBuilt),
+    lotSize: normalizeText(record.lotSize ?? record.lot),
+    mlsNumber: normalizeText(record.mlsNumber ?? record.mls ?? record.listingId),
+    sourceUrls,
+    sourceSummary: normalizeText(record.sourceSummary ?? record.sourcesSummary ?? record.sourceNames),
+    notes: normalizeText(record.notes ?? record.relevance ?? record.reason)
+  };
+}
+
+function normalizeActivePendingListing(record = {}) {
+  const sourceUrls = normalizeSourceUrls(record.sourceUrls ?? record.sources ?? record.urls ?? record.citations);
+  return {
+    address: normalizeText(record.address, ''),
+    status: normalizeText(record.status, ''),
+    listOrPendingDate: normalizeText(record.listOrPendingDate ?? record.listDate ?? record.pendingDate ?? record.date, ''),
+    listPrice: normalizeText(record.listPrice ?? record.pendingPrice ?? record.price, ''),
+    beds: normalizeText(record.beds ?? record.bedrooms),
+    baths: normalizeText(record.baths ?? record.bathrooms),
+    sqft: normalizeText(record.sqft ?? record.squareFeet ?? record.livingArea),
+    yearBuilt: normalizeText(record.yearBuilt),
+    lotSize: normalizeText(record.lotSize ?? record.lot),
+    mlsNumber: normalizeText(record.mlsNumber ?? record.mls ?? record.listingId),
+    sourceUrls,
+    sourceSummary: normalizeText(record.sourceSummary ?? record.sourcesSummary ?? record.sourceNames),
+    notes: normalizeText(record.notes ?? record.relevance ?? record.reason)
+  };
+}
+
+function normalizeRejectedComparable(record = {}) {
+  return {
+    address: normalizeText(record.address, 'Unknown address'),
+    category: normalizeText(record.category ?? record.type, 'unknown'),
+    reason: normalizeText(record.reason ?? record.notes ?? record.explanation, 'Verification did not meet the minimum evidence standard.'),
+    sourceUrls: normalizeSourceUrls(record.sourceUrls ?? record.sources ?? record.urls ?? record.citations)
+  };
+}
+
+function hasKnownValue(value) {
+  const text = normalizeText(value, '').toLowerCase();
+  return Boolean(text && !/^(unknown|n\/a|na|none|null|not available|unavailable|not found|not verified|unverified|not disclosed|undisclosed)$/i.test(text));
+}
+
+function isActiveOrPendingStatus(status) {
+  const text = normalizeText(status, '').toLowerCase();
+  if (!hasKnownValue(text)) return false;
+  if (/\b(sold|closed|expired|withdrawn|cancelled|canceled|off[-\s]?market)\b/i.test(text)) return false;
+  return /\b(active|for sale|pending|contingent|under contract)\b/i.test(text);
+}
+
+function hasRequiredSaleEvidence(comp) {
+  return Boolean(
+    hasKnownValue(comp.address)
+    && hasKnownValue(comp.salePrice)
+    && hasKnownValue(comp.saleDate)
+    && comp.sourceUrls.length > 0
+  );
+}
+
+function hasRequiredActivePendingEvidence(comp) {
+  return Boolean(
+    hasKnownValue(comp.address)
+    && isActiveOrPendingStatus(comp.status)
+    && hasKnownValue(comp.listPrice)
+    && comp.sourceUrls.length > 0
+  );
+}
+
+export function parseComparableValidationResponse(responseText) {
+  const parsed = parseJsonObject(responseText);
+  if (!parsed || Array.isArray(parsed)) {
+    throw new Error('Comparable validation returned unparseable JSON.');
+  }
+
+  const verifiedComparableSales = firstArrayValue(parsed, [
+    'verifiedComparableSales',
+    'validatedComparableSales',
+    'comparableSales',
+    'closedSales',
+    'sales'
+  ])
+    .map(normalizeComparableSale)
+    .filter(hasRequiredSaleEvidence);
+
+  const verifiedActivePendingListings = firstArrayValue(parsed, [
+    'verifiedActivePendingListings',
+    'validatedActivePendingListings',
+    'activePendingListings',
+    'activeListings',
+    'pendingListings',
+    'listings'
+  ])
+    .map(normalizeActivePendingListing)
+    .filter(hasRequiredActivePendingEvidence);
+
+  const conflictedComparables = firstArrayValue(parsed, [
+    'conflictedComparables',
+    'conflicts',
+    'conflictingComparables'
+  ]).map(normalizeRejectedComparable);
+
+  const rejectedComparables = firstArrayValue(parsed, [
+    'rejectedComparables',
+    'excludedComparables',
+    'unverifiedComparables',
+    'rejected'
+  ]).map(normalizeRejectedComparable);
+
+  const validationNotes = Array.isArray(parsed.validationNotes)
+    ? parsed.validationNotes.map((note) => normalizeText(note, '')).filter(Boolean)
+    : [];
+
+  return {
+    verifiedComparableSales,
+    verifiedActivePendingListings,
+    conflictedComparables,
+    rejectedComparables,
+    validationNotes
+  };
+}
+
+function countVerifiedComparables(evidence) {
+  return (evidence.verifiedComparableSales?.length || 0)
+    + (evidence.verifiedActivePendingListings?.length || 0);
+}
+
+function tableCell(value) {
+  return normalizeText(value, '').replace(/\|/g, '/');
+}
+
+function markdownSourceLinks(sourceUrls = []) {
+  if (!sourceUrls.length) return 'none';
+  return sourceUrls.map((url, index) => `[Source ${index + 1}](${url})`).join(', ');
+}
+
+function formatComparableValidationEvidence(evidence) {
+  const salesRows = evidence.verifiedComparableSales.map((comp) => (
+    `| ${tableCell(comp.address)} | ${tableCell(comp.saleDate)} | ${tableCell(comp.salePrice)} | ${tableCell(comp.beds)} | ${tableCell(comp.baths)} | ${tableCell(comp.sqft)} | ${tableCell(comp.yearBuilt)} | ${tableCell(comp.lotSize)} | ${tableCell(comp.mlsNumber)} | ${markdownSourceLinks(comp.sourceUrls)} | ${tableCell(comp.notes)} |`
+  ));
+
+  const activeRows = evidence.verifiedActivePendingListings.map((comp) => (
+    `| ${tableCell(comp.address)} | ${tableCell(comp.status)} | ${tableCell(comp.listOrPendingDate)} | ${tableCell(comp.listPrice)} | ${tableCell(comp.beds)} | ${tableCell(comp.baths)} | ${tableCell(comp.sqft)} | ${tableCell(comp.yearBuilt)} | ${tableCell(comp.lotSize)} | ${tableCell(comp.mlsNumber)} | ${markdownSourceLinks(comp.sourceUrls)} | ${tableCell(comp.notes)} |`
+  ));
+
+  const conflictedRows = evidence.conflictedComparables.map((comp) => (
+    `- ${comp.address} (${comp.category}): ${comp.reason}${comp.sourceUrls.length ? ` Sources: ${comp.sourceUrls.join(', ')}` : ''}`
+  ));
+
+  const rejectedRows = evidence.rejectedComparables.map((comp) => (
+    `- ${comp.address} (${comp.category}): ${comp.reason}`
+  ));
+
+  return `## Verified Comparable Sales
+| Address | Sale Date | Sale Price | Beds | Baths | SqFt | Year Built | Lot Size | MLS # | Sources | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+${salesRows.length ? salesRows.join('\n') : '| No verified comparable sales available |  |  |  |  |  |  |  |  |  |  |'}
+
+## Verified Active/Pending Listings
+| Address | Status | List/Pending Date | List/Pending Price | Beds | Baths | SqFt | Year Built | Lot Size | MLS # | Sources | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+${activeRows.length ? activeRows.join('\n') : '| No verified active/pending listings available |  |  |  |  |  |  |  |  |  |  |  |'}
+
+## Conflicted Comparables Not Approved for Client Tables
+${conflictedRows.length ? conflictedRows.join('\n') : '- None reported.'}
+
+## Rejected/Unverified Comparables Not Approved for Client Tables
+${rejectedRows.length ? rejectedRows.join('\n') : '- None reported.'}
+
+## Validation Notes
+${evidence.validationNotes.length ? evidence.validationNotes.map((note) => `- ${note}`).join('\n') : '- All verified comps above met the minimum evidence standard.'}`;
+}
+
 export async function validateCompsAndListings({ reportsText, model, enableSearch }) {
-  const result = await callGemini({
-    model,
-    prompt: buildValidationPrompt(reportsText),
-    enableSearch,
-    index: 0,
-    attachments: []
-  });
-  return result.content;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= MAX_COMP_VALIDATION_ATTEMPTS; attempt += 1) {
+    try {
+      const result = await callGemini({
+        model,
+        prompt: buildValidationPrompt(reportsText, {
+          attempt,
+          previousFailure: lastError?.message || ''
+        }),
+        enableSearch,
+        index: attempt - 1,
+        attachments: [],
+        maxOutputTokens: 32768,
+        temperature: 0.2
+      });
+
+      const evidence = parseComparableValidationResponse(result.content);
+      const verifiedCount = countVerifiedComparables(evidence);
+      if (verifiedCount < MIN_VERIFIED_COMP_COUNT) {
+        throw new Error('No comparable sales, active listings, or pending listings met the minimum verification standard.');
+      }
+
+      return {
+        content: formatComparableValidationEvidence(evidence),
+        evidence,
+        attempts: attempt,
+        searchSuggestions: result.searchSuggestions || []
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new Error(`Comparable validation could not verify any usable comparable sales, active listings, or pending listings after ${MAX_COMP_VALIDATION_ATTEMPTS} attempts. Final report was not generated because unverified comps are blocked. Last validation error: ${lastError?.message || 'Unknown validation error'}`);
 }
 
 export async function inferValueRangeFromReport({ reportText, model }) {
@@ -320,17 +558,13 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
     .map((report, index) => `--- Report ${index + 1} ---\n${report.content}`)
     .join('\n\n');
 
-  let validatedCompsContent = 'Validation step unavailable.';
-  try {
-    await notifyProgressPhase(onProgressPhase, 'validating');
-    validatedCompsContent = await validateCompsAndListings({
-      reportsText,
-      model,
-      enableSearch
-    });
-  } catch (error) {
-    validatedCompsContent = `Validation step failed: ${error.message}. Proceed with caution and note that comps were not independently verified.`;
-  }
+  await notifyProgressPhase(onProgressPhase, 'validating');
+  const comparableValidation = await validateCompsAndListings({
+    reportsText,
+    model,
+    enableSearch
+  });
+  const validatedCompsContent = comparableValidation.content;
 
   await notifyProgressPhase(onProgressPhase, 'merging');
   const result = await callGemini({
@@ -343,7 +577,8 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
     enableSearch: false,
     index: 0,
     attachments: [],
-    extraTools: [{ code_execution: {} }]
+    extraTools: [{ code_execution: {} }],
+    temperature: 0.35
   });
 
   const complianceReview = await runFinalComplianceReview({
@@ -380,6 +615,11 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
     valuations: mergeValueRange(extracted, inferredRange),
     inferredAddress,
     validatedCompsContent,
+    comparableValidation: {
+      attempts: comparableValidation.attempts,
+      evidence: comparableValidation.evidence,
+      searchSuggestions: comparableValidation.searchSuggestions
+    },
     complianceReview: {
       status: complianceReview.status,
       model: complianceReview.model,
