@@ -20,6 +20,9 @@ const WORKER_CONCURRENCY = 4;
 const DEFAULT_WEEKLY_REPORT_LIMIT = 5;
 const MAX_CONFIGURED_WEEKLY_REPORT_LIMIT = 1000;
 const DEFAULT_USAGE_LIMIT_TIME_ZONE = 'America/Detroit';
+const DEFAULT_UNLIMITED_REPORT_LIMIT_EMAILS = Object.freeze([
+  'heinonenmh@gmail.com'
+]);
 
 const WEEKLY_LIMIT_ENV_KEYS = Object.freeze({
   fast: 'FAST_REPORT_WEEKLY_LIMIT',
@@ -60,6 +63,25 @@ function getWeeklyReportLimit(tier) {
     return DEFAULT_WEEKLY_REPORT_LIMIT;
   }
   return Math.min(MAX_CONFIGURED_WEEKLY_REPORT_LIMIT, parsed);
+}
+
+function normalizeLimitEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getUnlimitedReportLimitEmails() {
+  const configured = String(process.env.UNLIMITED_REPORT_LIMIT_EMAILS || '')
+    .split(',')
+    .map(normalizeLimitEmail)
+    .filter(Boolean);
+  return new Set([
+    ...DEFAULT_UNLIMITED_REPORT_LIMIT_EMAILS,
+    ...configured
+  ]);
+}
+
+function hasUnlimitedReportLimits(user) {
+  return getUnlimitedReportLimitEmails().has(normalizeLimitEmail(user?.email));
 }
 
 function resolveReportModel(model) {
@@ -185,9 +207,29 @@ function normalizeUsageLimitMetadata(row, payload) {
 }
 
 export async function getReportUsageForUser(user) {
-  await ensureSchema();
   const timeZone = getUsageLimitTimeZone();
   const generatedAt = new Date().toISOString();
+
+  if (hasUnlimitedReportLimits(user)) {
+    return {
+      timeZone,
+      generatedAt,
+      unlimited: true,
+      limits: REPORT_MODEL_OPTIONS.map((option) => ({
+        tier: option.tier,
+        label: option.label,
+        model: option.model,
+        limit: null,
+        used: null,
+        remaining: null,
+        unlimited: true,
+        windowStart: null,
+        resetAt: null
+      }))
+    };
+  }
+
+  await ensureSchema();
 
   const limits = await Promise.all(REPORT_MODEL_OPTIONS.map(async (option) => {
     const weeklyLimit = getWeeklyReportLimit(option.tier);
@@ -316,8 +358,37 @@ export async function createReportJob(user, input) {
   await ensureSchema();
   const payload = sanitizeReportInput(input);
   const id = crypto.randomUUID();
-  const usageEventId = crypto.randomUUID();
   const progress = { total: payload.reportCount, completed: 0, phase: 'queued' };
+
+  if (hasUnlimitedReportLimits(user)) {
+    const { rows } = await sql`
+      INSERT INTO report_jobs (
+        id,
+        user_id,
+        user_email,
+        status,
+        payload,
+        report_count,
+        reports,
+        progress
+      )
+      VALUES (
+        ${id},
+        ${user.userId},
+        ${user.email},
+        'queued',
+        ${jsonParam(payload)}::jsonb,
+        ${payload.reportCount},
+        '[]'::jsonb,
+        ${jsonParam(progress)}::jsonb
+      )
+      RETURNING *
+    `;
+
+    return normalizeReportRow(rows[0], { includePayload: true, includeReports: true });
+  }
+
+  const usageEventId = crypto.randomUUID();
   const weeklyLimit = getWeeklyReportLimit(payload.modelTier);
   const timeZone = getUsageLimitTimeZone();
 
@@ -522,6 +593,56 @@ export async function retryReportForUser(user, id) {
 
   const payload = sanitizeReportInput(existing.payload || {});
   const progress = { total: payload.reportCount, completed: 0, phase: 'queued' };
+
+  if (hasUnlimitedReportLimits(user)) {
+    const { rows } = await sql`
+      WITH report_state AS (
+        SELECT status
+        FROM report_jobs
+        WHERE id = ${reportId}
+          AND user_id = ${user.userId}
+        LIMIT 1
+        FOR UPDATE
+      ),
+      updated_report AS (
+        UPDATE report_jobs
+        SET
+          status = 'queued',
+          payload = ${jsonParam(payload)}::jsonb,
+          report_count = ${payload.reportCount},
+          reports = '[]'::jsonb,
+          final_report = NULL,
+          progress = ${jsonParam(progress)}::jsonb,
+          error = NULL,
+          started_at = NULL,
+          completed_at = NULL,
+          updated_at = now()
+        WHERE id = ${reportId}
+          AND user_id = ${user.userId}
+          AND status <> 'processing'
+        RETURNING *
+      )
+      SELECT
+        updated_report.*,
+        (SELECT status FROM report_state) AS existing_status
+      FROM report_state
+      LEFT JOIN updated_report ON TRUE
+    `;
+
+    const row = rows[0];
+    if (!row?.id) {
+      if (!row?.existing_status) {
+        throw new HttpError(404, 'Report not found.');
+      }
+      if (row.existing_status === 'processing') {
+        throw new HttpError(409, 'Report is already processing.');
+      }
+      throw new HttpError(409, 'Report could not be retried.');
+    }
+
+    return normalizeReportRow(row, { includePayload: true, includeReports: true });
+  }
+
   const weeklyLimit = getWeeklyReportLimit(payload.modelTier);
   const timeZone = getUsageLimitTimeZone();
   const usageEventId = crypto.randomUUID();

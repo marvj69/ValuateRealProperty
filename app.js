@@ -497,18 +497,24 @@
             limits: limits.map((item) => {
                 const tier = normalizeTierName(item.tier);
                 const display = getTierDisplay(tier);
-                const limit = asUsageNumber(item.limit);
-                const used = asUsageNumber(item.used);
-                const remaining = Number.isFinite(Number(item.remaining))
-                    ? asUsageNumber(item.remaining)
-                    : Math.max(0, limit - used);
+                const unlimited = item.unlimited === true;
+                const limit = unlimited ? null : asUsageNumber(item.limit);
+                const used = unlimited ? null : asUsageNumber(item.used);
+                const remaining = unlimited
+                    ? null
+                    : (
+                        Number.isFinite(Number(item.remaining))
+                            ? asUsageNumber(item.remaining)
+                            : Math.max(0, limit - used)
+                    );
                 return {
                     tier,
                     label: item.label || display.label,
                     model: item.model || display.model,
                     limit,
                     used,
-                    remaining: Math.max(0, remaining),
+                    remaining: unlimited ? null : Math.max(0, remaining),
+                    unlimited,
                     resetAt: item.resetAt || item.windowEnd || null,
                     windowStart: item.windowStart || null
                 };
@@ -528,6 +534,7 @@
                 limit: null,
                 used: null,
                 remaining: null,
+                unlimited: false,
                 resetAt: null
             };
         });
@@ -565,15 +572,16 @@
         const limits = getUsageLimitsForRender();
         usageLimitGrid.innerHTML = limits.map((item) => {
             const display = getTierDisplay(item.tier);
-            const hasNumbers = signedIn && isUsageNumber(item.limit) && isUsageNumber(item.used) && isUsageNumber(item.remaining);
-            const remainingText = hasNumbers ? `${item.remaining} left` : (loading ? 'Loading' : 'Sign in');
-            const usedText = hasNumbers ? `${item.used} used` : (loading ? 'Checking usage' : 'Usage hidden');
-            const limitText = hasNumbers ? `${item.limit} weekly` : 'Weekly limit';
-            const percent = hasNumbers ? usagePercent(item).toFixed(1) : '0';
+            const unlimited = signedIn && item.unlimited === true;
+            const hasNumbers = signedIn && !unlimited && isUsageNumber(item.limit) && isUsageNumber(item.used) && isUsageNumber(item.remaining);
+            const remainingText = unlimited ? 'Unlimited' : (hasNumbers ? `${item.remaining} left` : (loading ? 'Loading' : 'Sign in'));
+            const usedText = unlimited ? 'No usage cap' : (hasNumbers ? `${item.used} used` : (loading ? 'Checking usage' : 'Usage hidden'));
+            const limitText = unlimited ? 'No weekly limit' : (hasNumbers ? `${item.limit} weekly` : 'Weekly limit');
+            const percent = unlimited ? '100' : (hasNumbers ? usagePercent(item).toFixed(1) : '0');
             const selected = item.tier === getTierForModel();
             const exhausted = hasNumbers && item.remaining <= 0;
             return `
-                <div class="usage-limit-item${loading && !hasNumbers ? ' is-loading' : ''}${selected ? ' is-selected' : ''}${exhausted ? ' is-exhausted' : ''}" aria-label="${escapeAttribute(item.label)} usage">
+                <div class="usage-limit-item${loading && !hasNumbers && !unlimited ? ' is-loading' : ''}${selected ? ' is-selected' : ''}${exhausted ? ' is-exhausted' : ''}${unlimited ? ' is-unlimited' : ''}" aria-label="${escapeAttribute(item.label)} usage">
                     <div class="usage-limit-top">
                         <span><i class="fas ${display.icon}"></i> ${escapeHtml(item.label || display.label)}</span>
                         <strong>${escapeHtml(remainingText)}</strong>
@@ -600,6 +608,8 @@
                 usageResetText.textContent = appState.usageLimitsError;
             } else if (loading && !appState.usageLimits) {
                 usageResetText.textContent = 'Checking current usage...';
+            } else if (limits.some((item) => item.unlimited)) {
+                usageResetText.textContent = 'Your account has unlimited Fast and Smart reports.';
             } else {
                 const resetAt = limits.find((item) => item.resetAt)?.resetAt;
                 const resetLabel = formatUsageReset(resetAt);
@@ -612,6 +622,8 @@
             const selected = getSelectedUsageLimit();
             if (!signedIn) {
                 selectedUsageHint.textContent = 'Sign in to view selected model usage.';
+            } else if (selected?.unlimited) {
+                selectedUsageHint.textContent = `${selected.label}: unlimited reports available.`;
             } else if (loading && (!selected || !isUsageNumber(selected.limit))) {
                 selectedUsageHint.textContent = 'Checking selected model usage...';
             } else if (selected && isUsageNumber(selected.limit)) {
