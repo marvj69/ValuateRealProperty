@@ -89,7 +89,7 @@ async function createSchema() {
     CREATE TABLE IF NOT EXISTS report_usage_counters (
       user_id TEXT NOT NULL,
       user_email TEXT NOT NULL,
-      report_tier TEXT NOT NULL CHECK (report_tier IN ('fast', 'smart')),
+      report_tier TEXT NOT NULL CHECK (report_tier IN ('fast', 'smart', 'experimental')),
       window_start TIMESTAMPTZ NOT NULL,
       window_end TIMESTAMPTZ NOT NULL,
       used INTEGER NOT NULL DEFAULT 0 CHECK (used >= 0),
@@ -105,13 +105,53 @@ async function createSchema() {
       user_id TEXT NOT NULL,
       user_email TEXT NOT NULL,
       report_job_id TEXT,
-      report_tier TEXT NOT NULL CHECK (report_tier IN ('fast', 'smart')),
+      report_tier TEXT NOT NULL CHECK (report_tier IN ('fast', 'smart', 'experimental')),
       model TEXT NOT NULL,
       event_type TEXT NOT NULL DEFAULT 'created' CHECK (event_type IN ('created', 'retry')),
       window_start TIMESTAMPTZ NOT NULL,
       window_end TIMESTAMPTZ NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
+  `;
+
+  await sql`
+    DO $$
+    DECLARE tier_constraint_name TEXT;
+    BEGIN
+      FOR tier_constraint_name IN
+        SELECT constraint_record.conname
+        FROM pg_constraint AS constraint_record
+        WHERE constraint_record.conrelid = 'report_usage_counters'::regclass
+          AND constraint_record.contype = 'c'
+          AND pg_get_constraintdef(constraint_record.oid) ILIKE '%report_tier%'
+      LOOP
+        EXECUTE format('ALTER TABLE report_usage_counters DROP CONSTRAINT %I', tier_constraint_name);
+      END LOOP;
+
+      ALTER TABLE report_usage_counters
+      ADD CONSTRAINT report_usage_counters_report_tier_check
+      CHECK (report_tier IN ('fast', 'smart', 'experimental'));
+    END $$;
+  `;
+
+  await sql`
+    DO $$
+    DECLARE tier_constraint_name TEXT;
+    BEGIN
+      FOR tier_constraint_name IN
+        SELECT constraint_record.conname
+        FROM pg_constraint AS constraint_record
+        WHERE constraint_record.conrelid = 'report_usage_events'::regclass
+          AND constraint_record.contype = 'c'
+          AND pg_get_constraintdef(constraint_record.oid) ILIKE '%report_tier%'
+      LOOP
+        EXECUTE format('ALTER TABLE report_usage_events DROP CONSTRAINT %I', tier_constraint_name);
+      END LOOP;
+
+      ALTER TABLE report_usage_events
+      ADD CONSTRAINT report_usage_events_report_tier_check
+      CHECK (report_tier IN ('fast', 'smart', 'experimental'));
+    END $$;
   `;
 
   await sql`

@@ -19,7 +19,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <link rel="stylesheet" href="styles.css?v=4.7">
+    <link rel="stylesheet" href="styles.css?v=4.9">
 </head>
 <body class="auth-loading">
 
@@ -256,6 +256,17 @@
                                 <span>Weekly limit</span>
                             </div>
                         </div>
+                        <div class="usage-limit-item is-loading">
+                            <div class="usage-limit-top">
+                                <span><i class="fas fa-flask"></i> Experimental</span>
+                                <strong>Loading</strong>
+                            </div>
+                            <div class="usage-meter" aria-hidden="true"><span style="width:0%"></span></div>
+                            <div class="usage-limit-meta">
+                                <span>Checking usage</span>
+                                <span>Weekly limit</span>
+                            </div>
+                        </div>
                     </div>
                     <p id="usageResetText" class="usage-reset-text">Usage refreshes after sign-in.</p>
                 </section>
@@ -346,6 +357,7 @@
                                 <select id="modelSelect" class="custom-input">
                                     <option value="gemini-flash-lite-latest" selected>Fast</option>
                                     <option value="gemini-3-flash-preview">Smart</option>
+                                    <option value="experimental">Experimental</option>
                                 </select>
                                 <i class="fas fa-chevron-down select-chevron"></i>
                             </div>
@@ -463,6 +475,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=4.8"></script>
+    <script src="app.js?v=4.9"></script>
 </body>
 </html>

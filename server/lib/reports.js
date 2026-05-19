@@ -28,7 +28,8 @@ const DEFAULT_UNLIMITED_REPORT_LIMIT_EMAILS = Object.freeze([
 
 const WEEKLY_LIMIT_ENV_KEYS = Object.freeze({
   fast: 'FAST_REPORT_WEEKLY_LIMIT',
-  smart: 'SMART_REPORT_WEEKLY_LIMIT'
+  smart: 'SMART_REPORT_WEEKLY_LIMIT',
+  experimental: 'EXPERIMENTAL_REPORT_WEEKLY_LIMIT'
 });
 
 function asString(value, maxLength = 20000) {
@@ -89,7 +90,7 @@ function hasUnlimitedReportLimits(user) {
 function resolveReportModel(model) {
   const selection = getReportModelSelection(model || process.env.REPORT_MODEL || DEFAULT_REPORT_MODEL);
   if (!selection) {
-    throw new HttpError(400, 'Unsupported AI model. Choose Fast or Smart.', {
+    throw new HttpError(400, 'Unsupported AI model. Choose Fast, Smart, or Experimental.', {
       field: 'model',
       allowedValues: getAllowedReportModels()
     });
@@ -166,8 +167,11 @@ export function sanitizeReportInput(input = {}) {
   const reportAudience = ['buyer', 'seller', 'investor'].includes(input.reportAudience)
     ? input.reportAudience
     : 'seller';
-  const reportCount = asReportCount(input.reportCount);
   const modelSelection = resolveReportModel(input.model);
+  const reportCount = modelSelection.reportCount || asReportCount(input.reportCount);
+  const draftModels = Array.isArray(modelSelection.draftModels)
+    ? modelSelection.draftModels.slice(0, reportCount)
+    : [];
 
   return {
     propertyAddress,
@@ -180,6 +184,8 @@ export function sanitizeReportInput(input = {}) {
     model: modelSelection.model,
     modelTier: modelSelection.tier,
     modelLabel: modelSelection.label,
+    supportModel: modelSelection.supportModel || modelSelection.model,
+    draftModels,
     attachments
   };
 }
@@ -331,6 +337,9 @@ export function normalizeReportRow(row, { includePayload = false, includeReports
     attempts: row.attempts,
     model: payload.model || null,
     modelTier: payload.modelTier || null,
+    modelLabel: payload.modelLabel || null,
+    supportModel: payload.supportModel || null,
+    draftModels: Array.isArray(payload.draftModels) ? payload.draftModels : [],
     usageLimit: normalizeUsageLimitMetadata(row, payload)
   };
 
@@ -994,6 +1003,14 @@ async function runPool(items, concurrency, worker) {
   await Promise.all(runners);
 }
 
+function getDraftModelPlan(payload, reportCount) {
+  const configuredPlan = Array.isArray(payload.draftModels)
+    ? payload.draftModels.map((model) => asString(model, 200)).filter(Boolean)
+    : [];
+  const fallbackModel = asString(payload.supportModel || payload.model, 200) || DEFAULT_REPORT_MODEL;
+  return Array.from({ length: reportCount }, (_, index) => configuredPlan[index] || fallbackModel);
+}
+
 async function processClaimedReport(row) {
   let payload = null;
   let reportCount = Number(row.report_count) || DEFAULT_REPORT_COUNT;
@@ -1004,16 +1021,19 @@ async function processClaimedReport(row) {
     payload = sanitizeReportInput(row.payload || {});
     const prompt = buildReportPrompt(payload);
     reportCount = payload.reportCount;
+    const draftModelPlan = getDraftModelPlan(payload, reportCount);
+    const supportModel = asString(payload.supportModel || payload.model, 200) || DEFAULT_REPORT_MODEL;
     reports = Array.from({ length: reportCount }, () => null);
 
     await runPool(
       Array.from({ length: reportCount }, (_, index) => index),
       WORKER_CONCURRENCY,
       async (index) => {
+        const draftModel = draftModelPlan[index] || supportModel;
         try {
           const result = await withRetries(
             () => callGemini({
-              model: payload.model,
+              model: draftModel,
               prompt,
               enableSearch: payload.enableSearch,
               index,
@@ -1025,6 +1045,7 @@ async function processClaimedReport(row) {
           reports[index] = {
             index,
             success: true,
+            model: draftModel,
             content: result.content,
             searchSuggestions: result.searchSuggestions || [],
             valuations: extractValuations(result.content)
@@ -1033,6 +1054,7 @@ async function processClaimedReport(row) {
           reports[index] = {
             index,
             success: false,
+            model: draftModel,
             error: error.message || 'Unknown Gemini error'
           };
         } finally {
@@ -1060,7 +1082,7 @@ async function processClaimedReport(row) {
     const finalReport = await generateMergedReport({
       successfulReports,
       reportAudience: payload.reportAudience,
-      model: payload.model,
+      model: supportModel,
       enableSearch: payload.enableSearch,
       onProgressPhase: (phase) => updateReportProgress(row.id, reports, {
         total: reportCount,
@@ -1070,6 +1092,10 @@ async function processClaimedReport(row) {
     });
 
     finalReport.model = payload.model;
+    finalReport.modelTier = payload.modelTier;
+    finalReport.modelLabel = payload.modelLabel;
+    finalReport.supportModel = supportModel;
+    finalReport.draftModels = draftModelPlan;
     finalReport.promptKey = payload.promptKey;
     finalReport.reportAudience = payload.reportAudience;
     finalReport.propertyAddress = payload.propertyAddress || finalReport.inferredAddress || '';

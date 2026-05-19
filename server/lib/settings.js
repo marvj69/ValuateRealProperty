@@ -1,11 +1,11 @@
 import { ensureSchema, sql } from './db.js';
 import { HttpError } from './http.js';
-import { FAST_REPORT_MODEL, SMART_REPORT_MODEL, normalizeReportModelName } from './report-models.js';
+import { FAST_REPORT_MODEL, getAllowedReportModels, normalizeReportModelName } from './report-models.js';
 
 const USER_SETTING_DEFINITIONS = Object.freeze({
   model: {
     defaultValue: FAST_REPORT_MODEL,
-    allowedValues: [FAST_REPORT_MODEL, SMART_REPORT_MODEL],
+    allowedValues: getAllowedReportModels(),
     normalizeValue: normalizeReportModelName
   },
   reportAudience: {

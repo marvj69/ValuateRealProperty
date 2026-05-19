@@ -363,11 +363,12 @@ ${evidence.validationNotes.length ? evidence.validationNotes.map((note) => `- ${
 export async function validateCompsAndListings({ reportsText, model, enableSearch }) {
   let lastError = null;
   const validationReportsText = prepareReportsTextForValidation(reportsText);
+  const validationModel = model || COMP_VALIDATION_MODEL;
 
   for (let attempt = 1; attempt <= MAX_COMP_VALIDATION_ATTEMPTS; attempt += 1) {
     try {
       const result = await callGemini({
-        model: COMP_VALIDATION_MODEL,
+        model: validationModel,
         prompt: buildValidationPrompt(validationReportsText, {
           attempt,
           previousFailure: lastError?.message || ''
@@ -390,6 +391,7 @@ export async function validateCompsAndListings({ reportsText, model, enableSearc
         content: formatComparableValidationEvidence(evidence),
         evidence,
         attempts: attempt,
+        model: validationModel,
         searchSuggestions: result.searchSuggestions || []
       };
     } catch (error) {
@@ -406,7 +408,7 @@ export async function inferValueRangeFromReport({ reportText, model }) {
   if (!cleanedText) return null;
 
   const result = await callGemini({
-    model: 'gemini-flash-lite-latest',
+    model: model || COMP_VALIDATION_MODEL,
     prompt: buildValueExtractionPrompt(cleanedText),
     enableSearch: false,
     index: 0,
@@ -444,7 +446,7 @@ export async function inferAddressFromFinalReport({ reportText, model }) {
   if (!cleanedText) return null;
 
   const result = await callGemini({
-    model: 'gemini-flash-lite-latest',
+    model: model || COMP_VALIDATION_MODEL,
     prompt: buildAddressExtractionPrompt(cleanedText),
     enableSearch: false,
     index: 0,
@@ -547,9 +549,9 @@ async function notifyProgressPhase(onProgressPhase, phase) {
   }
 }
 
-export async function reviewFinalReportCompliance({ reportText, reportAudience }) {
+export async function reviewFinalReportCompliance({ reportText, reportAudience, model = COMPLIANCE_REVIEW_MODEL }) {
   const result = await callGemini({
-    model: COMPLIANCE_REVIEW_MODEL,
+    model,
     prompt: buildComplianceReviewPrompt({ reportText, reportAudience }),
     enableSearch: false,
     index: 0,
@@ -560,14 +562,14 @@ export async function reviewFinalReportCompliance({ reportText, reportAudience }
 
   return {
     ...parseComplianceReviewResponse(result.content),
-    model: COMPLIANCE_REVIEW_MODEL,
+    model,
     reviewedAt: new Date().toISOString()
   };
 }
 
-async function reviseFinalReportForCompliance({ reportText, findings, reportAudience }) {
+async function reviseFinalReportForCompliance({ reportText, findings, reportAudience, model = COMPLIANCE_REVISION_MODEL }) {
   const result = await callGemini({
-    model: COMPLIANCE_REVISION_MODEL,
+    model,
     prompt: buildComplianceRevisionPrompt({ reportText, findings, reportAudience }),
     enableSearch: false,
     index: 0,
@@ -583,7 +585,7 @@ async function reviseFinalReportForCompliance({ reportText, findings, reportAudi
   return revisedReport;
 }
 
-export async function runFinalComplianceReview({ reportText, reportAudience, onProgressPhase }) {
+export async function runFinalComplianceReview({ reportText, reportAudience, model = COMPLIANCE_REVIEW_MODEL, onProgressPhase }) {
   let currentReportText = String(reportText || '').trim();
   if (!currentReportText) {
     throw new Error('Final ethics and compliance review cannot run on an empty report.');
@@ -595,7 +597,8 @@ export async function runFinalComplianceReview({ reportText, reportAudience, onP
     await notifyProgressPhase(onProgressPhase, round === 0 ? 'compliance_review' : 'compliance_rereview');
     const review = await reviewFinalReportCompliance({
       reportText: currentReportText,
-      reportAudience
+      reportAudience,
+      model
     });
     attempts.push(review);
 
@@ -603,7 +606,7 @@ export async function runFinalComplianceReview({ reportText, reportAudience, onP
       return {
         content: currentReportText,
         status: 'PASS',
-        model: COMPLIANCE_REVIEW_MODEL,
+        model,
         revisionModel: COMPLIANCE_REVISION_MODEL,
         reviewedAt: review.reviewedAt,
         revisionRounds,
@@ -615,7 +618,8 @@ export async function runFinalComplianceReview({ reportText, reportAudience, onP
     currentReportText = await reviseFinalReportForCompliance({
       reportText: currentReportText,
       findings: review.findings,
-      reportAudience
+      reportAudience,
+      model: COMPLIANCE_REVISION_MODEL
     });
     revisionRounds += 1;
 
@@ -623,7 +627,7 @@ export async function runFinalComplianceReview({ reportText, reportAudience, onP
       return {
         content: currentReportText,
         status: 'AUTO_REPAIRED',
-        model: COMPLIANCE_REVIEW_MODEL,
+        model,
         revisionModel: COMPLIANCE_REVISION_MODEL,
         reviewedAt: review.reviewedAt,
         repairedAt: new Date().toISOString(),
@@ -669,6 +673,7 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
   const complianceReview = await runFinalComplianceReview({
     reportText: result.content,
     reportAudience,
+    model,
     onProgressPhase
   });
   const finalContent = complianceReview.content;
@@ -702,6 +707,7 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
     validatedCompsContent,
     comparableValidation: {
       attempts: comparableValidation.attempts,
+      model: comparableValidation.model,
       evidence: comparableValidation.evidence,
       searchSuggestions: comparableValidation.searchSuggestions
     },

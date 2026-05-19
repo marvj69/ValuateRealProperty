@@ -12,11 +12,14 @@
     });
     const REPORT_MODEL_TIERS = Object.freeze({
         'gemini-flash-lite-latest': 'fast',
-        'gemini-3-flash-preview': 'smart'
+        'gemini-3-flash-preview': 'smart',
+        experimental: 'experimental'
     });
+    const REPORT_TIER_ORDER = Object.freeze(['fast', 'smart', 'experimental']);
     const REPORT_TIER_DISPLAY = Object.freeze({
         fast: { label: 'Fast', icon: 'fa-bolt', model: 'gemini-flash-lite-latest' },
-        smart: { label: 'Smart', icon: 'fa-brain', model: 'gemini-3-flash-preview' }
+        smart: { label: 'Smart', icon: 'fa-brain', model: 'gemini-3-flash-preview' },
+        experimental: { label: 'Experimental', icon: 'fa-flask', model: 'experimental' }
     });
     const REPORT_MODEL_ALIASES = Object.freeze({
         'gemini-3.5-flash': 'gemini-3-flash-preview',
@@ -530,7 +533,7 @@
     function getUsageLimitsForRender() {
         const usageLimits = appState.usageLimits?.limits || [];
         const byTier = new Map(usageLimits.map((item) => [item.tier, item]));
-        return ['fast', 'smart'].map((tier) => {
+        return REPORT_TIER_ORDER.map((tier) => {
             const display = getTierDisplay(tier);
             return byTier.get(tier) || {
                 tier,
@@ -543,6 +546,13 @@
                 resetAt: null
             };
         });
+    }
+
+    function formatLabelList(labels) {
+        const safeLabels = labels.filter(Boolean);
+        if (safeLabels.length <= 1) return safeLabels[0] || '';
+        if (safeLabels.length === 2) return `${safeLabels[0]} and ${safeLabels[1]}`;
+        return `${safeLabels.slice(0, -1).join(', ')}, and ${safeLabels[safeLabels.length - 1]}`;
     }
 
     function formatUsageReset(value) {
@@ -614,7 +624,7 @@
             } else if (loading && !appState.usageLimits) {
                 usageResetText.textContent = 'Checking current usage...';
             } else if (limits.some((item) => item.unlimited)) {
-                usageResetText.textContent = 'Your account has unlimited Fast and Smart reports.';
+                usageResetText.textContent = `Your account has unlimited ${formatLabelList(limits.map((item) => item.label))} reports.`;
             } else {
                 const resetAt = limits.find((item) => item.resetAt)?.resetAt;
                 const resetLabel = formatUsageReset(resetAt);
@@ -1855,7 +1865,10 @@
     }
 
     function normalizeHistoryModel(model) {
-        return model ? model.replace(/^models\//i, '') : 'Default model';
+        const normalized = normalizeModelName(model);
+        const tier = REPORT_MODEL_TIERS[normalized];
+        if (tier) return getTierDisplay(tier).label;
+        return normalized || 'Default model';
     }
 
     function buildHistoryMeta(report) {

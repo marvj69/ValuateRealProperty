@@ -135,9 +135,9 @@ Choose between two analysis approaches:
 - `POST /api/auth/logout` - clear the session
 - `GET /api/auth/me` - inspect current auth state
 - `GET|PATCH /api/user/settings` - read or update the signed-in user's report preferences
-- `POST /api/reports` - create a report job, subject to weekly Fast/Smart usage limits
+- `POST /api/reports` - create a report job, subject to weekly Fast/Smart/Experimental usage limits
 - `GET /api/reports` - list the signed-in user's reports
-- `GET /api/reports/usage` - read the signed-in user's Fast/Smart weekly limits, used counts, remaining counts, and reset time
+- `GET /api/reports/usage` - read the signed-in user's Fast/Smart/Experimental weekly limits, used counts, remaining counts, and reset time
 - `GET /api/reports/:id` - read one owned report
 - `DELETE /api/reports/:id` - delete one owned report
 - `POST /api/reports/:id/retry` - retry a failed or queued report when appropriate
@@ -147,9 +147,10 @@ Choose between two analysis approaches:
 - `GEMINI_API_KEY`: server-side Gemini key
 - `AUTH_SESSION_SECRET`: long random string used to sign sessions
 - `CRON_SECRET`: bearer token for the scheduled worker endpoint
-- `REPORT_MODEL`: optional default Gemini model
+- `REPORT_MODEL`: optional default report model choice
 - `FAST_REPORT_WEEKLY_LIMIT`: optional weekly Fast report limit per user, default `5`
 - `SMART_REPORT_WEEKLY_LIMIT`: optional weekly Smart report limit per user, default `5`
+- `EXPERIMENTAL_REPORT_WEEKLY_LIMIT`: optional weekly Experimental report limit per user, default `5`
 - `REPORT_USAGE_TIME_ZONE`: optional IANA time zone for weekly quota windows, default `America/Detroit`
 - `MAX_JSON_BODY_CHARS`: optional maximum JSON request body size, default `5500000`
 - `APP_BASE_URL`: optional absolute app URL used to build password reset links
@@ -167,8 +168,9 @@ Note: attachments are submitted directly to the report creation API and are limi
 ### Supported Models
 - Fast (`gemini-flash-lite-latest`) - 5 reports per user per week by default
 - Smart (`gemini-3-flash-preview`) - 5 reports per user per week by default
+- Experimental - 5 reports per user per week by default; generates 3 drafts with `gemini-flash-latest`, 3 drafts with `gemini-3.1-pro-preview`, then uses `gemini-3-flash-preview` for merge and support steps
 
-Usage limits are enforced server-side with an atomic Postgres quota counter and durable usage ledger. Deleting report history does not reset quota, retrying a report consumes quota, and direct API calls are restricted to the supported Fast/Smart model IDs.
+Usage limits are enforced server-side with an atomic Postgres quota counter and durable usage ledger. Deleting report history does not reset quota, retrying a report consumes quota, and direct API calls are restricted to the supported Fast/Smart/Experimental model choices.
 
 ### Browser Compatibility
 - Chrome/Edge (recommended)
