@@ -12,11 +12,11 @@
     });
     const REPORT_MODEL_TIERS = Object.freeze({
         'gemini-flash-lite-latest': 'fast',
-        'gemini-flash-latest': 'smart'
+        'gemini-3.5-flash': 'smart'
     });
     const REPORT_TIER_DISPLAY = Object.freeze({
         fast: { label: 'Fast', icon: 'fa-bolt', model: 'gemini-flash-lite-latest' },
-        smart: { label: 'Smart', icon: 'fa-brain', model: 'gemini-flash-latest' }
+        smart: { label: 'Smart', icon: 'fa-brain', model: 'gemini-3.5-flash' }
     });
     const PDF_BRAND_ASSETS = Object.freeze({
         realEstateGroup: 'photo assets/906-Real-Estate-Group_Logo-2024_Black.png',

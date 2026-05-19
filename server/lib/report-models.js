@@ -1,5 +1,5 @@
 export const FAST_REPORT_MODEL = 'gemini-flash-lite-latest';
-export const SMART_REPORT_MODEL = 'gemini-flash-latest';
+export const SMART_REPORT_MODEL = 'gemini-3.5-flash';
 export const DEFAULT_REPORT_MODEL = FAST_REPORT_MODEL;
 
 export const REPORT_MODEL_OPTIONS = Object.freeze([
