@@ -37,7 +37,7 @@ Choose between two analysis approaches:
 
 ### Prerequisites
 - A modern web browser (Chrome, Firefox, Safari, Edge)
-- A Google Gemini API key configured as a server environment variable
+- Google Gemini and OpenAI API keys configured as server environment variables
 - Vercel Postgres / Neon connection environment variables
 - An `AUTH_SESSION_SECRET` for the built-in signed-cookie auth flow
 - A Resend API key and verified sender address for production password recovery emails
@@ -122,7 +122,7 @@ Choose between two analysis approaches:
 - **Frontend**: Vanilla JavaScript with Tailwind CSS
 - **Backend**: Vercel API Functions under `api/`
 - **Async Processing**: `POST /api/reports` creates a queued job, returns a report ID, and starts backend processing with `waitUntil`; `/api/worker` can process queued/stale jobs on a cron schedule
-- **AI Integration**: Google Gemini API (v1beta) with web grounding, called only from backend functions
+- **AI Integration**: Google Gemini API plus OpenAI Responses API with web grounding, called only from backend functions
 - **Storage**: Postgres tables `app_users`, `report_jobs`, `report_usage_counters`, and `report_usage_events`, with reports scoped by authenticated `user_id`
 - **Service Worker**: Static/offline asset caching only
 - **PWA**: Installable Progressive Web App with manifest
@@ -145,6 +145,8 @@ Choose between two analysis approaches:
 
 ### Required Environment Variables
 - `GEMINI_API_KEY`: server-side Gemini key
+- `OPENAI_API_KEY`: server-side OpenAI key used by the Experimental GPT-5.5 workflow
+- `OPENAI_REASONING_EFFORT`: optional OpenAI reasoning effort override, default `medium`
 - `AUTH_SESSION_SECRET`: long random string used to sign sessions
 - `CRON_SECRET`: bearer token for the scheduled worker endpoint
 - `REPORT_MODEL`: optional default report model choice
@@ -168,7 +170,7 @@ Note: attachments are submitted directly to the report creation API and are limi
 ### Supported Models
 - Fast (`gemini-flash-lite-latest`) - 5 reports per user per week by default
 - Smart (`gemini-3-flash-preview`) - 5 reports per user per week by default
-- Experimental - 5 reports per user per week by default; generates 3 drafts with `gemini-flash-latest`, 3 drafts with `gemini-3.1-pro-preview`, then uses `gemini-3-flash-preview` for merge and support steps
+- Experimental - 5 reports per user per week by default; runs 6 concurrent drafts with OpenAI `gpt-5.5` at `medium` reasoning effort, then uses the same merge, validation, and compliance workflow with `gpt-5.5`
 
 Usage limits are enforced server-side with an atomic Postgres quota counter and durable usage ledger. Deleting report history does not reset quota, retrying a report consumes quota, and direct API calls are restricted to the supported Fast/Smart/Experimental model choices.
 
@@ -202,15 +204,15 @@ valuate/
 
 ## API Usage & Costs
 
-This application uses Google's Gemini API from backend functions only. Key points:
+This application uses Google Gemini and OpenAI APIs from backend functions only. Key points:
 
-- **Server Key Required**: Configure `GEMINI_API_KEY` in the deployment environment
-- **No Browser Secrets**: The frontend never receives or stores the Gemini key
-- **Web Search**: Uses Google's web grounding feature (may have additional costs)
+- **Server Keys Required**: Configure `GEMINI_API_KEY` and `OPENAI_API_KEY` in the deployment environment
+- **No Browser Secrets**: The frontend never receives or stores Gemini or OpenAI keys
+- **Web Search**: Uses provider-hosted web grounding/search features, which may have additional costs
 - **Token Usage**: Reports can be lengthy; monitor your API usage
-- **Rate Limits**: Subject to Google's API rate limits
+- **Rate Limits**: Subject to each provider's API rate limits
 
-For current pricing and limits, visit [Google AI Studio](https://aistudio.google.com/).
+For current pricing and limits, visit [Google AI Studio](https://aistudio.google.com/) and the [OpenAI pricing page](https://platform.openai.com/docs/pricing).
 
 ## Limitations & Disclaimers
 
@@ -236,4 +238,4 @@ For issues, questions, or feature requests, please open an issue on the reposito
 
 ---
 
-**Built with ❤️ using Google Gemini AI**
+**Built with Google Gemini and OpenAI APIs**

@@ -6,7 +6,7 @@ import {
   buildValidationPrompt,
   buildValueExtractionPrompt
 } from './prompts.js';
-import { callGemini } from './gemini.js';
+import { callGemini, isOpenAIModel } from './gemini.js';
 
 const COMPLIANCE_REVIEW_MODEL = 'gemini-flash-lite-latest';
 const COMPLIANCE_REVISION_MODEL = 'gemini-3-flash-preview';
@@ -23,6 +23,10 @@ const COMPLIANCE_REVISION_TIMEOUT_MS = 90_000;
 const EXTRACTION_TIMEOUT_MS = 30_000;
 const COMP_VALIDATION_HEADING_PATTERN = /\b(comparable|comparables|comp\b|comps\b|sale|sales|sold|closed|active|pending|listing|listings|competition|adjustment|market data|mls)\b/i;
 const COMP_VALIDATION_LINE_PATTERN = /\b(comparable|comparables|comp\b|comps\b|sale|sales|sold|closed|active|pending|listing|listings|competition|adjustment|mls|price\/sqft)\b/i;
+
+function resolveComplianceRevisionModel(model) {
+  return isOpenAIModel(model) ? model : COMPLIANCE_REVISION_MODEL;
+}
 
 function parseNumber(value) {
   if (value === null || value === undefined) return null;
@@ -360,7 +364,7 @@ ${rejectedRows.length ? rejectedRows.join('\n') : '- None reported.'}
 ${evidence.validationNotes.length ? evidence.validationNotes.map((note) => `- ${note}`).join('\n') : '- All verified comps above met the minimum evidence standard.'}`;
 }
 
-export async function validateCompsAndListings({ reportsText, model, enableSearch }) {
+export async function validateCompsAndListings({ reportsText, model, reasoningEffort, enableSearch }) {
   let lastError = null;
   const validationReportsText = prepareReportsTextForValidation(reportsText);
   const validationModel = model || COMP_VALIDATION_MODEL;
@@ -378,6 +382,7 @@ export async function validateCompsAndListings({ reportsText, model, enableSearc
         attachments: [],
         maxOutputTokens: 16384,
         temperature: 0.2,
+        reasoningEffort,
         timeoutMs: COMP_VALIDATION_TIMEOUT_MS
       });
 
@@ -403,7 +408,7 @@ export async function validateCompsAndListings({ reportsText, model, enableSearc
   throw new Error(`Comparable validation could not verify any usable comparable sales, active listings, or pending listings after ${MAX_COMP_VALIDATION_ATTEMPTS} attempts. Final report was not generated because unverified comps are blocked. Last validation error: ${lastError?.message || 'Unknown validation error'}`);
 }
 
-export async function inferValueRangeFromReport({ reportText, model }) {
+export async function inferValueRangeFromReport({ reportText, model, reasoningEffort }) {
   const cleanedText = String(reportText || '').replace(/\s+/g, ' ').trim();
   if (!cleanedText) return null;
 
@@ -414,6 +419,7 @@ export async function inferValueRangeFromReport({ reportText, model }) {
     index: 0,
     attachments: [],
     maxOutputTokens: 2048,
+    reasoningEffort,
     timeoutMs: EXTRACTION_TIMEOUT_MS
   });
 
@@ -441,7 +447,7 @@ export async function inferValueRangeFromReport({ reportText, model }) {
     : { rangeLow: rangeHigh, rangeHigh: rangeLow };
 }
 
-export async function inferAddressFromFinalReport({ reportText, model }) {
+export async function inferAddressFromFinalReport({ reportText, model, reasoningEffort }) {
   const cleanedText = String(reportText || '').replace(/\s+/g, ' ').trim();
   if (!cleanedText) return null;
 
@@ -452,6 +458,7 @@ export async function inferAddressFromFinalReport({ reportText, model }) {
     index: 0,
     attachments: [],
     maxOutputTokens: 512,
+    reasoningEffort,
     timeoutMs: EXTRACTION_TIMEOUT_MS
   });
 
@@ -549,7 +556,12 @@ async function notifyProgressPhase(onProgressPhase, phase) {
   }
 }
 
-export async function reviewFinalReportCompliance({ reportText, reportAudience, model = COMPLIANCE_REVIEW_MODEL }) {
+export async function reviewFinalReportCompliance({
+  reportText,
+  reportAudience,
+  model = COMPLIANCE_REVIEW_MODEL,
+  reasoningEffort
+}) {
   const result = await callGemini({
     model,
     prompt: buildComplianceReviewPrompt({ reportText, reportAudience }),
@@ -557,6 +569,7 @@ export async function reviewFinalReportCompliance({ reportText, reportAudience, 
     index: 0,
     attachments: [],
     maxOutputTokens: 8192,
+    reasoningEffort,
     timeoutMs: COMPLIANCE_REVIEW_TIMEOUT_MS
   });
 
@@ -567,7 +580,13 @@ export async function reviewFinalReportCompliance({ reportText, reportAudience, 
   };
 }
 
-async function reviseFinalReportForCompliance({ reportText, findings, reportAudience, model = COMPLIANCE_REVISION_MODEL }) {
+async function reviseFinalReportForCompliance({
+  reportText,
+  findings,
+  reportAudience,
+  model = COMPLIANCE_REVISION_MODEL,
+  reasoningEffort
+}) {
   const result = await callGemini({
     model,
     prompt: buildComplianceRevisionPrompt({ reportText, findings, reportAudience }),
@@ -575,6 +594,7 @@ async function reviseFinalReportForCompliance({ reportText, findings, reportAudi
     index: 0,
     attachments: [],
     maxOutputTokens: 65536,
+    reasoningEffort,
     timeoutMs: COMPLIANCE_REVISION_TIMEOUT_MS
   });
 
@@ -585,12 +605,19 @@ async function reviseFinalReportForCompliance({ reportText, findings, reportAudi
   return revisedReport;
 }
 
-export async function runFinalComplianceReview({ reportText, reportAudience, model = COMPLIANCE_REVIEW_MODEL, onProgressPhase }) {
+export async function runFinalComplianceReview({
+  reportText,
+  reportAudience,
+  model = COMPLIANCE_REVIEW_MODEL,
+  reasoningEffort,
+  onProgressPhase
+}) {
   let currentReportText = String(reportText || '').trim();
   if (!currentReportText) {
     throw new Error('Final ethics and compliance review cannot run on an empty report.');
   }
 
+  const revisionModel = resolveComplianceRevisionModel(model);
   const attempts = [];
   let revisionRounds = 0;
   for (let round = 0; round <= MAX_COMPLIANCE_REREVIEW_ROUNDS; round += 1) {
@@ -598,7 +625,8 @@ export async function runFinalComplianceReview({ reportText, reportAudience, mod
     const review = await reviewFinalReportCompliance({
       reportText: currentReportText,
       reportAudience,
-      model
+      model,
+      reasoningEffort
     });
     attempts.push(review);
 
@@ -607,7 +635,7 @@ export async function runFinalComplianceReview({ reportText, reportAudience, mod
         content: currentReportText,
         status: 'PASS',
         model,
-        revisionModel: COMPLIANCE_REVISION_MODEL,
+        revisionModel,
         reviewedAt: review.reviewedAt,
         revisionRounds,
         attempts: attempts.map(summarizeComplianceAttempt)
@@ -619,7 +647,8 @@ export async function runFinalComplianceReview({ reportText, reportAudience, mod
       reportText: currentReportText,
       findings: review.findings,
       reportAudience,
-      model: COMPLIANCE_REVISION_MODEL
+      model: revisionModel,
+      reasoningEffort
     });
     revisionRounds += 1;
 
@@ -628,7 +657,7 @@ export async function runFinalComplianceReview({ reportText, reportAudience, mod
         content: currentReportText,
         status: 'AUTO_REPAIRED',
         model,
-        revisionModel: COMPLIANCE_REVISION_MODEL,
+        revisionModel,
         reviewedAt: review.reviewedAt,
         repairedAt: new Date().toISOString(),
         revisionRounds,
@@ -641,7 +670,14 @@ export async function runFinalComplianceReview({ reportText, reportAudience, mod
   throw new Error('Final ethics and compliance review did not complete.');
 }
 
-export async function generateMergedReport({ successfulReports, reportAudience, model, enableSearch, onProgressPhase }) {
+export async function generateMergedReport({
+  successfulReports,
+  reportAudience,
+  model,
+  reasoningEffort,
+  enableSearch,
+  onProgressPhase
+}) {
   const reportsText = successfulReports
     .map((report, index) => `--- Report ${index + 1} ---\n${report.content}`)
     .join('\n\n');
@@ -650,6 +686,7 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
   const comparableValidation = await validateCompsAndListings({
     reportsText,
     model,
+    reasoningEffort,
     enableSearch
   });
   const validatedCompsContent = comparableValidation.content;
@@ -667,6 +704,7 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
     attachments: [],
     extraTools: [{ code_execution: {} }],
     temperature: 0.35,
+    reasoningEffort,
     timeoutMs: FINAL_REPORT_TIMEOUT_MS
   });
 
@@ -674,6 +712,7 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
     reportText: result.content,
     reportAudience,
     model,
+    reasoningEffort,
     onProgressPhase
   });
   const finalContent = complianceReview.content;
@@ -683,7 +722,8 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
   try {
     inferredRange = await inferValueRangeFromReport({
       reportText: finalContent,
-      model
+      model,
+      reasoningEffort
     });
   } catch (error) {
     inferredRange = null;
@@ -693,7 +733,8 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
   try {
     inferredAddress = await inferAddressFromFinalReport({
       reportText: finalContent,
-      model
+      model,
+      reasoningEffort
     });
   } catch (error) {
     inferredAddress = null;

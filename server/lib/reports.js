@@ -184,7 +184,10 @@ export function sanitizeReportInput(input = {}) {
     model: modelSelection.model,
     modelTier: modelSelection.tier,
     modelLabel: modelSelection.label,
+    modelProvider: modelSelection.provider || null,
     supportModel: modelSelection.supportModel || modelSelection.model,
+    reasoningEffort: modelSelection.reasoningEffort || null,
+    draftConcurrency: modelSelection.draftConcurrency || null,
     draftModels,
     attachments
   };
@@ -338,7 +341,10 @@ export function normalizeReportRow(row, { includePayload = false, includeReports
     model: payload.model || null,
     modelTier: payload.modelTier || null,
     modelLabel: payload.modelLabel || null,
+    modelProvider: payload.modelProvider || null,
     supportModel: payload.supportModel || null,
+    reasoningEffort: payload.reasoningEffort || null,
+    draftConcurrency: payload.draftConcurrency || null,
     draftModels: Array.isArray(payload.draftModels) ? payload.draftModels : [],
     usageLimit: normalizeUsageLimitMetadata(row, payload)
   };
@@ -1023,11 +1029,15 @@ async function processClaimedReport(row) {
     reportCount = payload.reportCount;
     const draftModelPlan = getDraftModelPlan(payload, reportCount);
     const supportModel = asString(payload.supportModel || payload.model, 200) || DEFAULT_REPORT_MODEL;
+    const draftConcurrency = Math.min(
+      WORKER_CONCURRENCY,
+      Math.max(1, Number.parseInt(payload.draftConcurrency, 10) || WORKER_CONCURRENCY)
+    );
     reports = Array.from({ length: reportCount }, () => null);
 
     await runPool(
       Array.from({ length: reportCount }, (_, index) => index),
-      WORKER_CONCURRENCY,
+      draftConcurrency,
       async (index) => {
         const draftModel = draftModelPlan[index] || supportModel;
         try {
@@ -1038,6 +1048,7 @@ async function processClaimedReport(row) {
               enableSearch: payload.enableSearch,
               index,
               attachments: payload.attachments,
+              reasoningEffort: payload.reasoningEffort,
               timeoutMs: REPORT_DRAFT_TIMEOUT_MS
             }),
             { retries: 2, delayMs: 1500 }
@@ -1055,7 +1066,7 @@ async function processClaimedReport(row) {
             index,
             success: false,
             model: draftModel,
-            error: error.message || 'Unknown Gemini error'
+            error: error.message || 'Unknown AI error'
           };
         } finally {
           completed += 1;
@@ -1083,6 +1094,7 @@ async function processClaimedReport(row) {
       successfulReports,
       reportAudience: payload.reportAudience,
       model: supportModel,
+      reasoningEffort: payload.reasoningEffort,
       enableSearch: payload.enableSearch,
       onProgressPhase: (phase) => updateReportProgress(row.id, reports, {
         total: reportCount,
@@ -1094,8 +1106,11 @@ async function processClaimedReport(row) {
     finalReport.model = payload.model;
     finalReport.modelTier = payload.modelTier;
     finalReport.modelLabel = payload.modelLabel;
+    finalReport.modelProvider = payload.modelProvider;
     finalReport.supportModel = supportModel;
     finalReport.draftModels = draftModelPlan;
+    finalReport.reasoningEffort = payload.reasoningEffort;
+    finalReport.draftConcurrency = draftConcurrency;
     finalReport.promptKey = payload.promptKey;
     finalReport.reportAudience = payload.reportAudience;
     finalReport.propertyAddress = payload.propertyAddress || finalReport.inferredAddress || '';

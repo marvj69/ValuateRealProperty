@@ -1,8 +1,8 @@
 export const FAST_REPORT_MODEL = 'gemini-flash-lite-latest';
 export const SMART_REPORT_MODEL = 'gemini-3-flash-preview';
 export const EXPERIMENTAL_REPORT_MODEL = 'experimental';
-export const EXPERIMENTAL_FLASH_DRAFT_MODEL = 'gemini-flash-latest';
-export const EXPERIMENTAL_PRO_DRAFT_MODEL = 'gemini-3.1-pro-preview';
+export const OPENAI_EXPERIMENTAL_REPORT_MODEL = 'gpt-5.5';
+export const OPENAI_EXPERIMENTAL_REASONING_EFFORT = 'medium';
 export const DEFAULT_REPORT_MODEL = FAST_REPORT_MODEL;
 
 const LEGACY_REPORT_MODEL_ALIASES = Object.freeze({
@@ -10,34 +10,35 @@ const LEGACY_REPORT_MODEL_ALIASES = Object.freeze({
   'gemini-flash-latest': SMART_REPORT_MODEL
 });
 
-const EXPERIMENTAL_DRAFT_MODELS = Object.freeze([
-  EXPERIMENTAL_FLASH_DRAFT_MODEL,
-  EXPERIMENTAL_FLASH_DRAFT_MODEL,
-  EXPERIMENTAL_FLASH_DRAFT_MODEL,
-  EXPERIMENTAL_PRO_DRAFT_MODEL,
-  EXPERIMENTAL_PRO_DRAFT_MODEL,
-  EXPERIMENTAL_PRO_DRAFT_MODEL
-]);
+const EXPERIMENTAL_DRAFT_COUNT = 6;
+const EXPERIMENTAL_DRAFT_MODELS = Object.freeze(
+  Array.from({ length: EXPERIMENTAL_DRAFT_COUNT }, () => OPENAI_EXPERIMENTAL_REPORT_MODEL)
+);
 
 export const REPORT_MODEL_OPTIONS = Object.freeze([
   Object.freeze({
     tier: 'fast',
     label: 'Fast',
+    provider: 'gemini',
     model: FAST_REPORT_MODEL,
     supportModel: FAST_REPORT_MODEL
   }),
   Object.freeze({
     tier: 'smart',
     label: 'Smart',
+    provider: 'gemini',
     model: SMART_REPORT_MODEL,
     supportModel: SMART_REPORT_MODEL
   }),
   Object.freeze({
     tier: 'experimental',
     label: 'Experimental',
+    provider: 'openai',
     model: EXPERIMENTAL_REPORT_MODEL,
-    supportModel: SMART_REPORT_MODEL,
+    supportModel: OPENAI_EXPERIMENTAL_REPORT_MODEL,
+    reasoningEffort: OPENAI_EXPERIMENTAL_REASONING_EFFORT,
     reportCount: EXPERIMENTAL_DRAFT_MODELS.length,
+    draftConcurrency: EXPERIMENTAL_DRAFT_COUNT,
     draftModels: EXPERIMENTAL_DRAFT_MODELS
   })
 ]);
@@ -61,9 +62,12 @@ export function getReportModelSelection(model = DEFAULT_REPORT_MODEL) {
     ? {
         tier: option.tier,
         label: option.label,
+        provider: option.provider || null,
         model: option.model,
         supportModel: option.supportModel || option.model,
+        reasoningEffort: option.reasoningEffort || null,
         reportCount: option.reportCount || null,
+        draftConcurrency: option.draftConcurrency || null,
         draftModels: option.draftModels ? [...option.draftModels] : null
       }
     : null;

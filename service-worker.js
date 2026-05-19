@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v4.9';
+const CACHE_VERSION = 'v5.0';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
