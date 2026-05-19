@@ -16,7 +16,9 @@ const DEFAULT_REPORT_COUNT = 16;
 const MAX_ATTACHMENTS = 8;
 const MAX_ATTACHMENT_BASE64_CHARS = 4_000_000;
 const PROCESSING_STALE_MINUTES = 10;
-const WORKER_CONCURRENCY = 4;
+const WORKER_CONCURRENCY = 8;
+const REPORT_DRAFT_TIMEOUT_MS = 90_000;
+const MAX_STALE_PROCESSING_ATTEMPTS = 2;
 const DEFAULT_WEEKLY_REPORT_LIMIT = 5;
 const MAX_CONFIGURED_WEEKLY_REPORT_LIMIT = 1000;
 const DEFAULT_USAGE_LIMIT_TIME_ZONE = 'America/Detroit';
@@ -559,6 +561,55 @@ export async function getReportForUser(user, id) {
   return normalizeReportRow(rows[0], { includePayload: true, includeReports: true });
 }
 
+export async function recoverStaleReportForUser(user, id) {
+  await ensureSchema();
+  const reportId = asReportId(id);
+  const retryMessage = 'Previous processing attempt timed out before finishing. Restarting automatically with the shorter validation path.';
+  const failedMessage = 'Report processing timed out before finishing. Please retry the report.';
+  const { rows } = await sql`
+    WITH target AS (
+      SELECT id, attempts
+      FROM report_jobs
+      WHERE id = ${reportId}
+        AND user_id = ${user.userId}
+        AND status = 'processing'
+        AND updated_at < now() - (${PROCESSING_STALE_MINUTES} || ' minutes')::interval
+      LIMIT 1
+      FOR UPDATE
+    )
+    UPDATE report_jobs
+    SET
+      status = CASE
+        WHEN target.attempts >= ${MAX_STALE_PROCESSING_ATTEMPTS} THEN 'failed'
+        ELSE 'queued'
+      END,
+      progress = jsonb_set(
+        progress,
+        '{phase}',
+        to_jsonb(CASE
+          WHEN target.attempts >= ${MAX_STALE_PROCESSING_ATTEMPTS} THEN 'failed'
+          ELSE 'queued'
+        END::text),
+        true
+      ),
+      error = CASE
+        WHEN target.attempts >= ${MAX_STALE_PROCESSING_ATTEMPTS} THEN ${failedMessage}
+        ELSE ${retryMessage}
+      END,
+      updated_at = now(),
+      completed_at = CASE
+        WHEN target.attempts >= ${MAX_STALE_PROCESSING_ATTEMPTS} THEN now()
+        ELSE completed_at
+      END
+    FROM target
+    WHERE report_jobs.id = target.id
+    RETURNING report_jobs.*
+  `;
+  return rows[0]
+    ? normalizeReportRow(rows[0], { includePayload: true, includeReports: true })
+    : null;
+}
+
 export async function deleteReportForUser(user, id) {
   await ensureSchema();
   const reportId = asReportId(id);
@@ -966,7 +1017,8 @@ async function processClaimedReport(row) {
               prompt,
               enableSearch: payload.enableSearch,
               index,
-              attachments: payload.attachments
+              attachments: payload.attachments,
+              timeoutMs: REPORT_DRAFT_TIMEOUT_MS
             }),
             { retries: 2, delayMs: 1500 }
           );

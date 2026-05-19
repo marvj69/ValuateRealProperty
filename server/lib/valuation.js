@@ -10,9 +10,19 @@ import { callGemini } from './gemini.js';
 
 const COMPLIANCE_REVIEW_MODEL = 'gemini-flash-lite-latest';
 const COMPLIANCE_REVISION_MODEL = 'gemini-3-flash-preview';
+const COMP_VALIDATION_MODEL = 'gemini-flash-lite-latest';
 const MAX_COMPLIANCE_REREVIEW_ROUNDS = 2;
 const MAX_COMP_VALIDATION_ATTEMPTS = 3;
 const MIN_VERIFIED_COMP_COUNT = 1;
+const COMP_VALIDATION_TIMEOUT_MS = 60_000;
+const COMP_VALIDATION_MAX_CHARS = 60_000;
+const COMP_VALIDATION_PER_REPORT_MAX_CHARS = 8_000;
+const FINAL_REPORT_TIMEOUT_MS = 120_000;
+const COMPLIANCE_REVIEW_TIMEOUT_MS = 45_000;
+const COMPLIANCE_REVISION_TIMEOUT_MS = 90_000;
+const EXTRACTION_TIMEOUT_MS = 30_000;
+const COMP_VALIDATION_HEADING_PATTERN = /\b(comparable|comparables|comp\b|comps\b|sale|sales|sold|closed|active|pending|listing|listings|competition|adjustment|market data|mls)\b/i;
+const COMP_VALIDATION_LINE_PATTERN = /\b(comparable|comparables|comp\b|comps\b|sale|sales|sold|closed|active|pending|listing|listings|competition|adjustment|mls|price\/sqft)\b/i;
 
 function parseNumber(value) {
   if (value === null || value === undefined) return null;
@@ -77,6 +87,73 @@ export function mergeValueRange(valuations, valueRangeOverride) {
 function normalizeText(value, fallback = 'unknown') {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim();
   return text || fallback;
+}
+
+function truncateText(value, maxChars) {
+  const text = String(value || '').trim();
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars).trim()}\n[Truncated to keep validation within runtime limits.]`;
+}
+
+function extractCompFocusedText(reportText) {
+  const text = String(reportText || '').replace(/\r\n?/g, '\n').trim();
+  if (!text) return '';
+
+  const sections = text
+    .split(/(?=^#{1,5}\s+)/m)
+    .map((section) => section.trim())
+    .filter(Boolean);
+
+  const sectionMatches = sections.filter((section) => {
+    const heading = section.split('\n')[0] || '';
+    return COMP_VALIDATION_HEADING_PATTERN.test(heading)
+      || (
+        COMP_VALIDATION_LINE_PATTERN.test(section)
+        && (
+          /\|/.test(section)
+          || /https?:\/\//i.test(section)
+          || /\bMLS\b/i.test(section)
+          || /\$[\d,]{3,}/.test(section)
+        )
+      );
+  });
+
+  if (sectionMatches.length > 0) {
+    return sectionMatches.join('\n\n');
+  }
+
+  const lineMatches = text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => (
+      COMP_VALIDATION_LINE_PATTERN.test(line)
+      || /https?:\/\//i.test(line)
+      || /\bMLS\b/i.test(line)
+    ));
+
+  return lineMatches.join('\n');
+}
+
+function prepareReportsTextForValidation(reportsText) {
+  const original = String(reportsText || '').trim();
+  if (!original) return '';
+
+  const reportBlocks = original
+    .split(/(?=--- Report \d+ ---)/g)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  const blocks = reportBlocks.length > 0 ? reportBlocks : [original];
+
+  const compacted = blocks.map((block, index) => {
+    const headerMatch = block.match(/^--- Report \d+ ---/);
+    const header = headerMatch?.[0] || `--- Report ${index + 1} ---`;
+    const body = headerMatch ? block.slice(header.length).trim() : block;
+    const compFocusedText = extractCompFocusedText(body);
+    const selectedText = compFocusedText || body;
+    return `${header}\n${truncateText(selectedText, COMP_VALIDATION_PER_REPORT_MAX_CHARS)}`;
+  }).join('\n\n');
+
+  return truncateText(compacted, COMP_VALIDATION_MAX_CHARS);
 }
 
 function normalizeSourceUrls(value) {
@@ -285,20 +362,22 @@ ${evidence.validationNotes.length ? evidence.validationNotes.map((note) => `- ${
 
 export async function validateCompsAndListings({ reportsText, model, enableSearch }) {
   let lastError = null;
+  const validationReportsText = prepareReportsTextForValidation(reportsText);
 
   for (let attempt = 1; attempt <= MAX_COMP_VALIDATION_ATTEMPTS; attempt += 1) {
     try {
       const result = await callGemini({
-        model,
-        prompt: buildValidationPrompt(reportsText, {
+        model: COMP_VALIDATION_MODEL,
+        prompt: buildValidationPrompt(validationReportsText, {
           attempt,
           previousFailure: lastError?.message || ''
         }),
         enableSearch,
         index: attempt - 1,
         attachments: [],
-        maxOutputTokens: 32768,
-        temperature: 0.2
+        maxOutputTokens: 16384,
+        temperature: 0.2,
+        timeoutMs: COMP_VALIDATION_TIMEOUT_MS
       });
 
       const evidence = parseComparableValidationResponse(result.content);
@@ -315,6 +394,7 @@ export async function validateCompsAndListings({ reportsText, model, enableSearc
       };
     } catch (error) {
       lastError = error;
+      console.warn(`Comparable validation attempt ${attempt} failed: ${error.message || error}`);
     }
   }
 
@@ -331,7 +411,8 @@ export async function inferValueRangeFromReport({ reportText, model }) {
     enableSearch: false,
     index: 0,
     attachments: [],
-    maxOutputTokens: 2048
+    maxOutputTokens: 2048,
+    timeoutMs: EXTRACTION_TIMEOUT_MS
   });
 
   const responseText = (result.content || '').trim();
@@ -368,7 +449,8 @@ export async function inferAddressFromFinalReport({ reportText, model }) {
     enableSearch: false,
     index: 0,
     attachments: [],
-    maxOutputTokens: 512
+    maxOutputTokens: 512,
+    timeoutMs: EXTRACTION_TIMEOUT_MS
   });
 
   let candidate = (result.content || '').trim().split('\n')[0]?.trim() || '';
@@ -472,7 +554,8 @@ export async function reviewFinalReportCompliance({ reportText, reportAudience }
     enableSearch: false,
     index: 0,
     attachments: [],
-    maxOutputTokens: 8192
+    maxOutputTokens: 8192,
+    timeoutMs: COMPLIANCE_REVIEW_TIMEOUT_MS
   });
 
   return {
@@ -489,7 +572,8 @@ async function reviseFinalReportForCompliance({ reportText, findings, reportAudi
     enableSearch: false,
     index: 0,
     attachments: [],
-    maxOutputTokens: 65536
+    maxOutputTokens: 65536,
+    timeoutMs: COMPLIANCE_REVISION_TIMEOUT_MS
   });
 
   const revisedReport = cleanMarkdownResponse(result.content);
@@ -578,7 +662,8 @@ export async function generateMergedReport({ successfulReports, reportAudience, 
     index: 0,
     attachments: [],
     extraTools: [{ code_execution: {} }],
-    temperature: 0.35
+    temperature: 0.35,
+    timeoutMs: FINAL_REPORT_TIMEOUT_MS
   });
 
   const complianceReview = await runFinalComplianceReview({

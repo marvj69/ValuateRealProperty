@@ -1,8 +1,18 @@
 import { DEFAULT_REPORT_MODEL } from './report-models.js';
 
+const DEFAULT_GEMINI_TIMEOUT_MS = 120_000;
+const MIN_GEMINI_TIMEOUT_MS = 5_000;
+const MAX_GEMINI_TIMEOUT_MS = 240_000;
+
 export function normalizeModelName(model) {
   const selected = model || process.env.REPORT_MODEL || DEFAULT_REPORT_MODEL;
   return selected.replace(/^models\//i, '');
+}
+
+function resolveTimeoutMs(timeoutMs) {
+  const parsed = Number.parseInt(timeoutMs, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_GEMINI_TIMEOUT_MS;
+  return Math.min(MAX_GEMINI_TIMEOUT_MS, Math.max(MIN_GEMINI_TIMEOUT_MS, parsed));
 }
 
 function getThinkingConfigForModel(model) {
@@ -24,7 +34,8 @@ export async function callGemini({
   attachments = [],
   extraTools = [],
   maxOutputTokens = 65536,
-  temperature = null
+  temperature = null,
+  timeoutMs = DEFAULT_GEMINI_TIMEOUT_MS
 }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -76,49 +87,63 @@ export async function callGemini({
     requestBody.tools = tools;
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(requestBody)
-  });
+  const resolvedTimeoutMs = resolveTimeoutMs(timeoutMs);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), resolvedTimeoutMs);
 
-  if (!response.ok) {
-    let message = `Gemini API error: ${response.status}`;
-    try {
-      const errorData = await response.json();
-      message = errorData.error?.message || message;
-    } catch (error) {
-      // Keep the status-based message.
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      let message = `Gemini API error: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        message = errorData.error?.message || message;
+      } catch (error) {
+        // Keep the status-based message.
+      }
+      throw new Error(message);
     }
-    throw new Error(message);
-  }
 
-  const data = await response.json();
-  const candidate = data.candidates?.[0];
-  if (!candidate) {
-    throw new Error('No response generated.');
-  }
+    const data = await response.json();
+    const candidate = data.candidates?.[0];
+    if (!candidate) {
+      throw new Error('No response generated.');
+    }
 
-  const content = (candidate.content?.parts || [])
-    .map((part) => part.text || '')
-    .filter(Boolean)
-    .join('\n\n');
+    const content = (candidate.content?.parts || [])
+      .map((part) => part.text || '')
+      .filter(Boolean)
+      .join('\n\n');
 
-  if (!content) {
-    throw new Error('Gemini returned an empty response.');
-  }
+    if (!content) {
+      throw new Error('Gemini returned an empty response.');
+    }
 
-  let searchSuggestions = [];
-  if (candidate.groundingMetadata?.searchEntryPoint?.renderedContent) {
-    searchSuggestions = [candidate.groundingMetadata.searchEntryPoint.renderedContent];
-  }
-  if (candidate.groundingMetadata?.webSearchQueries) {
-    searchSuggestions = candidate.groundingMetadata.webSearchQueries;
-  }
+    let searchSuggestions = [];
+    if (candidate.groundingMetadata?.searchEntryPoint?.renderedContent) {
+      searchSuggestions = [candidate.groundingMetadata.searchEntryPoint.renderedContent];
+    }
+    if (candidate.groundingMetadata?.webSearchQueries) {
+      searchSuggestions = candidate.groundingMetadata.webSearchQueries;
+    }
 
-  return { content, searchSuggestions };
+    return { content, searchSuggestions };
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`Gemini request timed out after ${Math.round(resolvedTimeoutMs / 1000)} seconds.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function withRetries(operation, { retries = 2, delayMs = 1500 } = {}) {
