@@ -166,7 +166,7 @@ Note: attachments are submitted directly to the report creation API and are limi
 
 ### Supported Models
 - Fast (`gemini-flash-lite-latest`) - 5 reports per user per week by default
-- Smart (`gemini-flash-latest`) - 5 reports per user per week by default
+- Smart (`gemini-3-flash-preview`) - 5 reports per user per week by default
 
 Usage limits are enforced server-side with an atomic Postgres quota counter and durable usage ledger. Deleting report history does not reset quota, retrying a report consumes quota, and direct API calls are restricted to the supported Fast/Smart model IDs.
 

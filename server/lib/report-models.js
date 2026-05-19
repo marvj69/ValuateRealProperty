@@ -1,6 +1,11 @@
 export const FAST_REPORT_MODEL = 'gemini-flash-lite-latest';
-export const SMART_REPORT_MODEL = 'gemini-3.5-flash';
+export const SMART_REPORT_MODEL = 'gemini-3-flash-preview';
 export const DEFAULT_REPORT_MODEL = FAST_REPORT_MODEL;
+
+const LEGACY_REPORT_MODEL_ALIASES = Object.freeze({
+  'gemini-3.5-flash': SMART_REPORT_MODEL,
+  'gemini-flash-latest': SMART_REPORT_MODEL
+});
 
 export const REPORT_MODEL_OPTIONS = Object.freeze([
   Object.freeze({
@@ -23,7 +28,8 @@ const REPORT_MODEL_BY_NAME = Object.freeze(
 );
 
 export function normalizeReportModelName(model = DEFAULT_REPORT_MODEL) {
-  return String(model || DEFAULT_REPORT_MODEL).trim().replace(/^models\//i, '');
+  const normalized = String(model || DEFAULT_REPORT_MODEL).trim().replace(/^models\//i, '');
+  return LEGACY_REPORT_MODEL_ALIASES[normalized] || normalized;
 }
 
 export function getReportModelSelection(model = DEFAULT_REPORT_MODEL) {

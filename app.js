@@ -12,11 +12,15 @@
     });
     const REPORT_MODEL_TIERS = Object.freeze({
         'gemini-flash-lite-latest': 'fast',
-        'gemini-3.5-flash': 'smart'
+        'gemini-3-flash-preview': 'smart'
     });
     const REPORT_TIER_DISPLAY = Object.freeze({
         fast: { label: 'Fast', icon: 'fa-bolt', model: 'gemini-flash-lite-latest' },
-        smart: { label: 'Smart', icon: 'fa-brain', model: 'gemini-3.5-flash' }
+        smart: { label: 'Smart', icon: 'fa-brain', model: 'gemini-3-flash-preview' }
+    });
+    const REPORT_MODEL_ALIASES = Object.freeze({
+        'gemini-3.5-flash': 'gemini-3-flash-preview',
+        'gemini-flash-latest': 'gemini-3-flash-preview'
     });
     const PDF_BRAND_ASSETS = Object.freeze({
         realEstateGroup: 'photo assets/906-Real-Estate-Group_Logo-2024_Black.png',
@@ -228,7 +232,7 @@
             const select = document.getElementById(field.elementId);
             if (!select) return;
 
-            const settingValue = settings[key];
+            const settingValue = key === 'model' ? normalizeModelName(settings[key]) : settings[key];
             const nextValue = hasSelectOption(select, settingValue) ? settingValue : field.defaultValue;
             if (hasSelectOption(select, nextValue)) {
                 select.value = nextValue;
@@ -463,7 +467,8 @@
     }
 
     function normalizeModelName(model) {
-        return String(model || '').trim().replace(/^models\//i, '');
+        const normalized = String(model || '').trim().replace(/^models\//i, '');
+        return REPORT_MODEL_ALIASES[normalized] || normalized;
     }
 
     function getTierForModel(model = getSelectedReportsModel()) {
