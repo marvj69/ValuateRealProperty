@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { sanitizeReportInput, getDraftModelPlan } from '../server/lib/reports.js';
-import { FAST_REPORT_MODEL } from '../server/lib/report-models.js';
+import { FAST_REPORT_MODEL, SMART_REPORT_MODEL } from '../server/lib/report-models.js';
 import {
   generateMergedReport,
   resolveComplianceRevisionModel
@@ -154,4 +154,43 @@ assert.equal(finalReport.inferredAddress, '123 Fast Lane, Marquette, MI');
 assert.equal(calls.length, 7);
 assert.deepEqual([...new Set(calls.map((call) => call.model))], [FAST_REPORT_MODEL]);
 
-console.log(`Fast model routing verified across ${calls.length} Gemini workflow calls.`);
+const smartInput = sanitizeReportInput({
+  propertyAddress: '123 Smart Lane, Marquette, MI',
+  model: SMART_REPORT_MODEL,
+  reportCount: 4,
+  enableSearch: true
+});
+
+assert.equal(smartInput.modelTier, 'smart');
+assert.equal(smartInput.model, SMART_REPORT_MODEL);
+assert.equal(smartInput.supportModel, SMART_REPORT_MODEL);
+
+calls.length = 0;
+complianceReviews = 0;
+
+const smartFinalReport = await generateMergedReport({
+  successfulReports: [
+    {
+      index: 0,
+      success: true,
+      model: SMART_REPORT_MODEL,
+      content: 'Comparable sale: 100 Comp St sold for $300,000 on 2026-01-15. Source: https://example.com/comp'
+    }
+  ],
+  reportAudience: 'seller',
+  model: smartInput.supportModel,
+  reasoningEffort: smartInput.reasoningEffort,
+  enableSearch: smartInput.enableSearch
+});
+
+const smartValidationCalls = calls.filter((call) => call.prompt.startsWith('You are a data verification specialist'));
+const smartMergeCalls = calls.filter((call) => call.prompt.startsWith('You are a senior real estate valuation analyst'));
+
+assert.equal(smartFinalReport.comparableValidation.model, FAST_REPORT_MODEL);
+assert.equal(smartValidationCalls.length, 1);
+assert.equal(smartValidationCalls[0].model, FAST_REPORT_MODEL);
+assert.equal(smartMergeCalls.length, 1);
+assert.equal(smartMergeCalls[0].model, SMART_REPORT_MODEL);
+assert.equal(smartFinalReport.complianceReview.model, SMART_REPORT_MODEL);
+
+console.log(`Fast and Smart model routing verified across Gemini workflow calls.`);

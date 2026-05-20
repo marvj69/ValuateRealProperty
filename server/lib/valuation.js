@@ -729,7 +729,9 @@ export async function generateMergedReport({
   await notifyProgressPhase(onProgressPhase, 'validating');
   const comparableValidation = await validateCompsAndListings({
     reportsText,
-    model,
+    // Comparable validation is a dedicated grounded extraction pass. Keep it on
+    // the fast model so Smart synthesis does not stall this fail-closed gate.
+    model: COMP_VALIDATION_MODEL,
     reasoningEffort,
     enableSearch,
     artifactContext
