@@ -6,12 +6,11 @@ import {
   buildValidationPrompt,
   buildValueExtractionPrompt
 } from './prompts.js';
-import { isDeepSeekModel } from './gemini.js';
 import { callGeminiWithCache } from './report-artifacts.js';
+import { FAST_REPORT_MODEL } from './report-models.js';
 
-const COMPLIANCE_REVIEW_MODEL = 'gemini-flash-lite-latest';
-const COMPLIANCE_REVISION_MODEL = 'gemini-3-flash-preview';
-const COMP_VALIDATION_MODEL = 'gemini-flash-lite-latest';
+const COMPLIANCE_REVIEW_MODEL = FAST_REPORT_MODEL;
+const COMP_VALIDATION_MODEL = FAST_REPORT_MODEL;
 const MAX_COMPLIANCE_REREVIEW_ROUNDS = 2;
 const MAX_COMP_VALIDATION_ATTEMPTS = 3;
 const MIN_VERIFIED_COMP_COUNT = 1;
@@ -25,8 +24,8 @@ const EXTRACTION_TIMEOUT_MS = 30_000;
 const COMP_VALIDATION_HEADING_PATTERN = /\b(comparable|comparables|comp\b|comps\b|sale|sales|sold|closed|active|pending|listing|listings|competition|adjustment|market data|mls)\b/i;
 const COMP_VALIDATION_LINE_PATTERN = /\b(comparable|comparables|comp\b|comps\b|sale|sales|sold|closed|active|pending|listing|listings|competition|adjustment|mls|price\/sqft)\b/i;
 
-function resolveComplianceRevisionModel(model) {
-  return isDeepSeekModel(model) ? model : COMPLIANCE_REVISION_MODEL;
+export function resolveComplianceRevisionModel(model) {
+  return String(model || COMPLIANCE_REVIEW_MODEL).trim() || COMPLIANCE_REVIEW_MODEL;
 }
 
 function parseNumber(value) {
@@ -613,7 +612,7 @@ async function reviseFinalReportForCompliance({
   reportText,
   findings,
   reportAudience,
-  model = COMPLIANCE_REVISION_MODEL,
+  model = COMPLIANCE_REVIEW_MODEL,
   reasoningEffort,
   artifactContext,
   round = 0

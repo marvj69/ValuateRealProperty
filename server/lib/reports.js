@@ -1108,7 +1108,7 @@ async function runPool(items, concurrency, worker) {
   await Promise.all(runners);
 }
 
-function getDraftModelPlan(payload, reportCount) {
+export function getDraftModelPlan(payload, reportCount) {
   const configuredPlan = Array.isArray(payload.draftModels)
     ? payload.draftModels.map((model) => asString(model, 200)).filter(Boolean)
     : [];
