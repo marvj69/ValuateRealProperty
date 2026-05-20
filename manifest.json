@@ -1,7 +1,7 @@
 {
   "name": "Market Intelligence Studio",
   "short_name": "MarketIntel",
-  "description": "Generate comprehensive property valuation reports with Gemini, DeepSeek, and web-grounded AI.",
+  "description": "Generate comprehensive property valuation reports with Gemini and web-grounded AI.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

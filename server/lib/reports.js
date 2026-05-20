@@ -30,8 +30,7 @@ const DEFAULT_UNLIMITED_REPORT_LIMIT_EMAILS = Object.freeze([
 
 const WEEKLY_LIMIT_ENV_KEYS = Object.freeze({
   fast: 'FAST_REPORT_WEEKLY_LIMIT',
-  smart: 'SMART_REPORT_WEEKLY_LIMIT',
-  experimental: 'EXPERIMENTAL_REPORT_WEEKLY_LIMIT'
+  smart: 'SMART_REPORT_WEEKLY_LIMIT'
 });
 
 function asString(value, maxLength = 20000) {
@@ -92,7 +91,7 @@ function hasUnlimitedReportLimits(user) {
 function resolveReportModel(model) {
   const selection = getReportModelSelection(model || process.env.REPORT_MODEL || DEFAULT_REPORT_MODEL);
   if (!selection) {
-    throw new HttpError(400, 'Unsupported AI model. Choose Fast, Smart, or Experimental.', {
+    throw new HttpError(400, 'Unsupported AI model. Choose Fast or Smart.', {
       field: 'model',
       allowedValues: getAllowedReportModels()
     });
@@ -165,18 +164,10 @@ export function sanitizeReportInput(input = {}) {
     throw new HttpError(400, 'Provide a propertyAddress or at least one attachment.');
   }
 
-  const promptKey = input.promptKey === 'standard' ? 'standard' : 'experimental';
   const reportAudience = ['buyer', 'seller', 'investor'].includes(input.reportAudience)
     ? input.reportAudience
     : 'seller';
   const modelSelection = resolveReportModel(input.model);
-  if (modelSelection.provider === 'deepseek' && attachments.length > 0) {
-    throw new HttpError(400, 'Experimental reports use DeepSeek and do not support PDF or image attachments. Remove attachments or choose Fast/Smart for attachment-based reports.', {
-      field: 'attachments',
-      provider: 'deepseek',
-      model: modelSelection.supportModel || modelSelection.model
-    });
-  }
   const reportCount = modelSelection.reportCount || asReportCount(input.reportCount);
   const draftModels = Array.isArray(modelSelection.draftModels)
     ? modelSelection.draftModels.slice(0, reportCount)
@@ -187,7 +178,6 @@ export function sanitizeReportInput(input = {}) {
     additionalDetails,
     specialInstructions: asString(input.specialInstructions),
     reportAudience,
-    promptKey,
     reportCount,
     enableSearch: asBoolean(input.enableSearch, true),
     model: modelSelection.model,
@@ -1229,7 +1219,6 @@ async function processClaimedReport(row) {
     finalReport.draftModels = draftModelPlan;
     finalReport.reasoningEffort = payload.reasoningEffort;
     finalReport.draftConcurrency = draftConcurrency;
-    finalReport.promptKey = payload.promptKey;
     finalReport.reportAudience = payload.reportAudience;
     finalReport.propertyAddress = payload.propertyAddress || finalReport.inferredAddress || '';
 

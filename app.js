@@ -7,19 +7,16 @@
     const MAX_TOTAL_ATTACHMENT_BYTES = 3 * 1024 * 1024;
     const USER_SETTINGS_FIELDS = Object.freeze({
         model: { elementId: 'modelSelect', defaultValue: 'gemini-flash-lite-latest' },
-        reportAudience: { elementId: 'reportAudience', defaultValue: 'seller' },
-        promptKey: { elementId: 'promptSelect', defaultValue: 'experimental' }
+        reportAudience: { elementId: 'reportAudience', defaultValue: 'seller' }
     });
     const REPORT_MODEL_TIERS = Object.freeze({
         'gemini-flash-lite-latest': 'fast',
-        'gemini-3-flash-preview': 'smart',
-        experimental: 'experimental'
+        'gemini-3-flash-preview': 'smart'
     });
-    const REPORT_TIER_ORDER = Object.freeze(['fast', 'smart', 'experimental']);
+    const REPORT_TIER_ORDER = Object.freeze(['fast', 'smart']);
     const REPORT_TIER_DISPLAY = Object.freeze({
         fast: { label: 'Fast', icon: 'fa-bolt', model: 'gemini-flash-lite-latest' },
-        smart: { label: 'Smart', icon: 'fa-brain', model: 'gemini-3-flash-preview' },
-        experimental: { label: 'Experimental', icon: 'fa-flask', model: 'experimental' }
+        smart: { label: 'Smart', icon: 'fa-brain', model: 'gemini-3-flash-preview' }
     });
     const REPORT_MODEL_ALIASES = Object.freeze({
         'gemini-3.5-flash': 'gemini-3-flash-preview',
@@ -1383,7 +1380,6 @@
         const additionalDetails = document.getElementById('additionalDetails')?.value.trim() || '';
         const instructions = specialInstructions?.value.trim() || '';
         const reportAudience = document.getElementById('reportAudience')?.value || 'seller';
-        const promptKey = document.getElementById('promptSelect')?.value || 'experimental';
         const model = getSelectedReportsModel();
         const propertyFiles = attachmentState.files.length > 0
             ? attachmentState.files.map((entry) => entry.file)
@@ -1432,7 +1428,6 @@
                     additionalDetails,
                     specialInstructions: instructions,
                     reportAudience,
-                    promptKey,
                     model,
                     reportCount: DEFAULT_REPORT_COUNT,
                     attachments
@@ -1691,12 +1686,10 @@
             valuations,
             finalReport.valueRange || output.valueRange || requestState.finalValueRange
         );
-        const promptLabel = inputs.promptKey === 'experimental' ? 'Bank-Grade CMA' : 'Standard Valuation';
 
         return [
             { label: 'Subject property', value: address },
             { label: 'Prepared for', value: formatHistoryAudience(inputs.reportAudience || finalReport.reportAudience || 'seller') },
-            { label: 'Analysis style', value: promptLabel },
             { label: 'Valuation', value: formatPdfValueSummary(mergedValue) || 'See final report' },
             { label: 'Generated', value: formatHistoryDate(report?.createdAt || report?.created_at || new Date().toISOString()) }
         ];
@@ -1914,7 +1907,6 @@
             const item = document.createElement('div');
             item.className = 'history-item';
             const title = escapeHtml(getReportAddress(report));
-            const promptLabel = report.inputs?.promptKey === 'experimental' ? 'Bank-Grade CMA' : 'Standard';
             const status = statusLabel(report.status);
             const canRetry = report.status === 'failed';
             item.innerHTML = `
@@ -1924,7 +1916,6 @@
                 <div class="history-item-meta">${escapeHtml(buildHistoryMeta(report))}</div>
                 <div class="history-item-tags">
                     <span class="history-tag status-${report.status}">${status}</span>
-                    <span class="history-tag">${promptLabel}</span>
                 </div>
                 <div class="history-item-actions">
                     <button class="history-view" type="button" data-action="view" data-id="${report.id}">

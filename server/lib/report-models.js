@@ -1,19 +1,11 @@
 export const FAST_REPORT_MODEL = 'gemini-flash-lite-latest';
 export const SMART_REPORT_MODEL = 'gemini-3-flash-preview';
-export const EXPERIMENTAL_REPORT_MODEL = 'experimental';
-export const DEEPSEEK_EXPERIMENTAL_REPORT_MODEL = 'deepseek-v4-pro';
-export const DEEPSEEK_EXPERIMENTAL_REASONING_EFFORT = 'high';
 export const DEFAULT_REPORT_MODEL = FAST_REPORT_MODEL;
 
 const LEGACY_REPORT_MODEL_ALIASES = Object.freeze({
   'gemini-3.5-flash': SMART_REPORT_MODEL,
   'gemini-flash-latest': SMART_REPORT_MODEL
 });
-
-const EXPERIMENTAL_DRAFT_COUNT = 6;
-const EXPERIMENTAL_DRAFT_MODELS = Object.freeze(
-  Array.from({ length: EXPERIMENTAL_DRAFT_COUNT }, () => DEEPSEEK_EXPERIMENTAL_REPORT_MODEL)
-);
 
 export const REPORT_MODEL_OPTIONS = Object.freeze([
   Object.freeze({
@@ -29,17 +21,6 @@ export const REPORT_MODEL_OPTIONS = Object.freeze([
     provider: 'gemini',
     model: SMART_REPORT_MODEL,
     supportModel: SMART_REPORT_MODEL
-  }),
-  Object.freeze({
-    tier: 'experimental',
-    label: 'Experimental',
-    provider: 'deepseek',
-    model: EXPERIMENTAL_REPORT_MODEL,
-    supportModel: DEEPSEEK_EXPERIMENTAL_REPORT_MODEL,
-    reasoningEffort: DEEPSEEK_EXPERIMENTAL_REASONING_EFFORT,
-    reportCount: EXPERIMENTAL_DRAFT_MODELS.length,
-    draftConcurrency: EXPERIMENTAL_DRAFT_COUNT,
-    draftModels: EXPERIMENTAL_DRAFT_MODELS
   })
 ]);
 

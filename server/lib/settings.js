@@ -11,10 +11,6 @@ const USER_SETTING_DEFINITIONS = Object.freeze({
   reportAudience: {
     defaultValue: 'seller',
     allowedValues: ['buyer', 'seller', 'investor']
-  },
-  promptKey: {
-    defaultValue: 'experimental',
-    allowedValues: ['standard', 'experimental']
   }
 });
 

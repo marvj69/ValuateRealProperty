@@ -100,7 +100,7 @@ async function createSchema() {
     CREATE TABLE IF NOT EXISTS report_usage_counters (
       user_id TEXT NOT NULL,
       user_email TEXT NOT NULL,
-      report_tier TEXT NOT NULL CHECK (report_tier IN ('fast', 'smart', 'experimental')),
+      report_tier TEXT NOT NULL CHECK (report_tier IN ('fast', 'smart')),
       window_start TIMESTAMPTZ NOT NULL,
       window_end TIMESTAMPTZ NOT NULL,
       used INTEGER NOT NULL DEFAULT 0 CHECK (used >= 0),
@@ -116,13 +116,23 @@ async function createSchema() {
       user_id TEXT NOT NULL,
       user_email TEXT NOT NULL,
       report_job_id TEXT,
-      report_tier TEXT NOT NULL CHECK (report_tier IN ('fast', 'smart', 'experimental')),
+      report_tier TEXT NOT NULL CHECK (report_tier IN ('fast', 'smart')),
       model TEXT NOT NULL,
       event_type TEXT NOT NULL DEFAULT 'created' CHECK (event_type IN ('created', 'retry')),
       window_start TIMESTAMPTZ NOT NULL,
       window_end TIMESTAMPTZ NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
+  `;
+
+  await sql`
+    DELETE FROM report_usage_counters
+    WHERE report_tier NOT IN ('fast', 'smart')
+  `;
+
+  await sql`
+    DELETE FROM report_usage_events
+    WHERE report_tier NOT IN ('fast', 'smart')
   `;
 
   await sql`
@@ -141,7 +151,7 @@ async function createSchema() {
 
       ALTER TABLE report_usage_counters
       ADD CONSTRAINT report_usage_counters_report_tier_check
-      CHECK (report_tier IN ('fast', 'smart', 'experimental'));
+      CHECK (report_tier IN ('fast', 'smart'));
     END $$;
   `;
 
@@ -161,7 +171,7 @@ async function createSchema() {
 
       ALTER TABLE report_usage_events
       ADD CONSTRAINT report_usage_events_report_tier_check
-      CHECK (report_tier IN ('fast', 'smart', 'experimental'));
+      CHECK (report_tier IN ('fast', 'smart'));
     END $$;
   `;
 

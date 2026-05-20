@@ -42,81 +42,19 @@ Formatting:
 - State "Single Point Estimate: $XXX,XXX".
 - Keep a professional, analytical, objective tone.`;
 
-const EXPERIMENTAL_TEMPLATE = `### SYSTEM ROLE & OBJECTIVE
-You are an elite Senior Real Estate Appraiser and Market Data Scientist. Generate a bank-grade Comparative Market Analysis and Valuation Report.
-
-You do not guess. You act as a skeptical auditor of data. Use verifiable public data and the Sales Comparison Approach.
-
-### INTENDED AUDIENCE
-{{REPORT_AUDIENCE}}
-
-### INPUT DATA
-<SUBJECT_PROPERTY>
-Address: {{PROPERTY_ADDRESS}}
-PDF Context: {{PDF_NOTE}}
-Details: {{ADDITIONAL_DETAILS}}
-</SUBJECT_PROPERTY>
-
-<USER_INSTRUCTIONS>
-{{SPECIAL_INSTRUCTIONS}}
-</USER_INSTRUCTIONS>
-
-### EXECUTION PROTOCOL
-1. Search the subject address for tax records, prior listings, and public record signals.
-2. Search for sold homes in the ZIP/city/neighborhood from the last 6 months when possible.
-3. Search market reports for the current city/neighborhood.
-4. Select the best 3-5 closed sales and 2 active/pending competitors.
-5. Explain why each comp is relevant and how adjustments affect value.
-
-### REQUIRED OUTPUT FORMAT
-# Real Estate Valuation Report: [Insert Property Address]
-**Date:** [Current Date]
-**Analyst Confidence Score:** [Low/Medium/High]
-
-## 1. Executive Summary & Verdict
-- **Estimated Value Range:** $XXX,XXX - $XXX,XXX
-- **Most Probable List Price:** $XXX,XXX
-- **Liquidity Rating:** [Fast/Average/Slow]
-- **Top-Level Insight:** 2-3 sentences.
-
-## 2. Subject Property Anatomy
-- **Facts:** Beds | Baths | SqFt | Lot Size | Year Built
-- **The Hook:** Best feature.
-- **The Drag:** Biggest buyer objection.
-
-## 3. Macro & Micro Market Conditions
-Cite sources for data points.
-
-## 4. Comparable Sales Analysis
-Use a Markdown table with Address, Sold Date, Sold Price, SqFt, Price/SqFt, Distance, Adjustments/Notes.
-
-## 5. Active Competition
-Identify 2 active or pending competitors.
-
-## 6. SWOT Analysis
-
-## 7. Final Valuation Logic
-- **Conservative Liquidation Price:** $XXX,XXX
-- **Fair Market Value:** $XXX,XXX
-- **Aggressive List Price:** $XXX,XXX
-
-**DISCLAIMER:** This is an AI-generated analytical report based on publicly available web data. It is not an official appraisal. Physical inspection was not performed.`;
-
 export function buildReportPrompt(input) {
-  const isExperimental = input.promptKey === 'experimental';
   const attachments = Array.isArray(input.attachments) ? input.attachments : [];
   const attachmentNote = attachments.length
     ? 'Attached files include property PDFs and/or images. Use them as primary sources for subject property details.'
     : '';
   const detailsBlock = input.additionalDetails
-    ? (isExperimental ? input.additionalDetails : `Additional Details: ${input.additionalDetails}`)
+    ? `Additional Details: ${input.additionalDetails}`
     : '';
   const instructionsBlock = input.specialInstructions
-    ? (isExperimental ? input.specialInstructions : `Special Instructions: ${input.specialInstructions}`)
+    ? `Special Instructions: ${input.specialInstructions}`
     : '';
 
-  const template = isExperimental ? EXPERIMENTAL_TEMPLATE : STANDARD_TEMPLATE;
-  return template
+  return STANDARD_TEMPLATE
     .replace('{{PROPERTY_ADDRESS}}', input.propertyAddress || 'Address not provided (see attached files).')
     .replace('{{ADDITIONAL_DETAILS}}', detailsBlock)
     .replace('{{SPECIAL_INSTRUCTIONS}}', instructionsBlock)

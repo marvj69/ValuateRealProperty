@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { ensureSchema, sql } from './db.js';
-import { callGemini, isDeepSeekModel, normalizeModelName } from './gemini.js';
+import { callGemini, normalizeModelName } from './gemini.js';
 
 const CACHE_STATUS_HIT = 'hit';
 const CACHE_STATUS_MISS = 'miss';
@@ -61,7 +61,6 @@ export function buildReportInputFingerprint(payload = {}) {
     additionalDetails: asString(payload.additionalDetails),
     specialInstructions: asString(payload.specialInstructions),
     reportAudience: asString(payload.reportAudience, 100),
-    promptKey: asString(payload.promptKey, 100),
     reportCount: Number.parseInt(payload.reportCount, 10) || null,
     enableSearch: Boolean(payload.enableSearch),
     model: asString(payload.model, 200),
@@ -252,7 +251,7 @@ export async function callGeminiWithCache({
   }
 
   const normalizedModel = normalizeModelName(options.model);
-  const provider = isDeepSeekModel(normalizedModel) ? 'deepseek' : 'gemini';
+  const provider = 'gemini';
   const normalizedRequest = normalizeGeminiRequestForHash({
     ...options,
     model: normalizedModel

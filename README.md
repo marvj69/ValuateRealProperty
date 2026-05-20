@@ -16,14 +16,9 @@ Tailor your reports for different audiences:
 - **Seller Reports**: Emphasize pricing strategy, positioning, and preparation priorities
 - **Investor Reports**: Highlight cash flow potential, rent comps, cap rates, and ROI drivers
 
-### 📊 Report Styles
-Choose between two analysis approaches:
-- **Standard Valuation**: Comprehensive market analysis with detailed comps and market trends
-- **Bank-Grade CMA**: Strict, conservative analysis with rigorous data validation and adjustment grids
-
 ### 💾 Smart Storage & History
 - **Saved Valuations**: Automatically save all reports to the authenticated user's backend account
-- **Account Settings**: Persist AI model, audience, and report style preferences to the authenticated user's account
+- **Account Settings**: Persist AI model and audience preferences to the authenticated user's account
 - **Report History**: Access and review past valuations with a convenient history drawer
 - **PDF Export**: Download professional PDF reports with formatted tables and summaries
 
@@ -37,7 +32,7 @@ Choose between two analysis approaches:
 
 ### Prerequisites
 - A modern web browser (Chrome, Firefox, Safari, Edge)
-- Google Gemini and DeepSeek API keys configured as server environment variables
+- A Google Gemini API key configured as a server environment variable
 - Vercel Postgres / Neon connection environment variables
 - An `AUTH_SESSION_SECRET` for the built-in signed-cookie auth flow
 - A Resend API key and verified sender address for production password recovery emails
@@ -61,7 +56,7 @@ Choose between two analysis approaches:
    ```bash
    cp .env.example .env
    ```
-   Fill in `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `AUTH_SESSION_SECRET`, `CRON_SECRET`, and your Vercel Postgres / Neon connection values.
+   Fill in `GEMINI_API_KEY`, `AUTH_SESSION_SECRET`, `CRON_SECRET`, and your Vercel Postgres / Neon connection values.
 
 4. **Run with Vercel-compatible API routes**
    ```bash
@@ -95,7 +90,7 @@ Choose between two analysis approaches:
 
 2. **Configure Settings** (optional)
    - Choose your target audience (Buyer/Seller/Investor)
-   - Select report style (Standard or Bank-Grade CMA)
+   - Select the AI model for report generation
 
 3. **Generate Analysis**
    - Click "Generate Analysis"
@@ -122,7 +117,7 @@ Choose between two analysis approaches:
 - **Frontend**: Vanilla JavaScript with Tailwind CSS
 - **Backend**: Vercel API Functions under `api/`
 - **Async Processing**: `POST /api/reports` creates a queued job, returns a report ID, and starts backend processing with `waitUntil`; `/api/worker` can process queued/stale jobs on a cron schedule
-- **AI Integration**: Google Gemini API plus DeepSeek Chat Completions API, called only from backend functions
+- **AI Integration**: Google Gemini API, called only from backend functions
 - **Storage**: Postgres tables `app_users`, `report_jobs`, `report_usage_counters`, and `report_usage_events`, with reports scoped by authenticated `user_id`
 - **Service Worker**: Static/offline asset caching only
 - **PWA**: Installable Progressive Web App with manifest
@@ -135,9 +130,9 @@ Choose between two analysis approaches:
 - `POST /api/auth/logout` - clear the session
 - `GET /api/auth/me` - inspect current auth state
 - `GET|PATCH /api/user/settings` - read or update the signed-in user's report preferences
-- `POST /api/reports` - create a report job, subject to weekly Fast/Smart/Experimental usage limits
+- `POST /api/reports` - create a report job, subject to weekly Fast/Smart usage limits
 - `GET /api/reports` - list the signed-in user's reports
-- `GET /api/reports/usage` - read the signed-in user's Fast/Smart/Experimental weekly limits, used counts, remaining counts, and reset time
+- `GET /api/reports/usage` - read the signed-in user's Fast/Smart weekly limits, used counts, remaining counts, and reset time
 - `GET /api/reports/:id` - read one owned report
 - `DELETE /api/reports/:id` - delete one owned report
 - `POST /api/reports/:id/retry` - retry a failed or queued report when appropriate
@@ -145,15 +140,11 @@ Choose between two analysis approaches:
 
 ### Required Environment Variables
 - `GEMINI_API_KEY`: server-side Gemini key
-- `DEEPSEEK_API_KEY`: server-side DeepSeek key used by the Experimental workflow
-- `DEEPSEEK_REASONING_EFFORT`: optional DeepSeek reasoning effort override, default `high`
-- `DEEPSEEK_BASE_URL`: optional DeepSeek-compatible base URL, default `https://api.deepseek.com`
 - `AUTH_SESSION_SECRET`: long random string used to sign sessions
 - `CRON_SECRET`: bearer token for the scheduled worker endpoint
 - `REPORT_MODEL`: optional default report model choice
 - `FAST_REPORT_WEEKLY_LIMIT`: optional weekly Fast report limit per user, default `5`
 - `SMART_REPORT_WEEKLY_LIMIT`: optional weekly Smart report limit per user, default `5`
-- `EXPERIMENTAL_REPORT_WEEKLY_LIMIT`: optional weekly Experimental report limit per user, default `5`
 - `REPORT_USAGE_TIME_ZONE`: optional IANA time zone for weekly quota windows, default `America/Detroit`
 - `MAX_JSON_BODY_CHARS`: optional maximum JSON request body size, default `5500000`
 - `APP_BASE_URL`: optional absolute app URL used to build password reset links
@@ -171,9 +162,8 @@ Note: attachments are submitted directly to the report creation API and are limi
 ### Supported Models
 - Fast (`gemini-flash-lite-latest`) - 5 reports per user per week by default
 - Smart (`gemini-3-flash-preview`) - 5 reports per user per week by default
-- Experimental - 5 reports per user per week by default; runs 6 concurrent drafts with DeepSeek `deepseek-v4-pro` at `high` reasoning effort, then uses the same merge, validation, and compliance workflow with `deepseek-v4-pro`
 
-Usage limits are enforced server-side with an atomic Postgres quota counter and durable usage ledger. Deleting report history does not reset quota, retrying a report consumes quota, and direct API calls are restricted to the supported Fast/Smart/Experimental model choices.
+Usage limits are enforced server-side with an atomic Postgres quota counter and durable usage ledger. Deleting report history does not reset quota, retrying a report consumes quota, and direct API calls are restricted to the supported Fast/Smart model choices.
 
 ### Browser Compatibility
 - Chrome/Edge (recommended)
@@ -205,15 +195,15 @@ valuate/
 
 ## API Usage & Costs
 
-This application uses Google Gemini and DeepSeek APIs from backend functions only. Key points:
+This application uses Google Gemini APIs from backend functions only. Key points:
 
-- **Server Keys Required**: Configure `GEMINI_API_KEY` and `DEEPSEEK_API_KEY` in the deployment environment
-- **No Browser Secrets**: The frontend never receives or stores Gemini or DeepSeek keys
-- **Web Search**: Fast and Smart use Gemini web grounding. DeepSeek Experimental does not receive PDF/image attachments or hosted web-search tools through this integration.
+- **Server Key Required**: Configure `GEMINI_API_KEY` in the deployment environment
+- **No Browser Secrets**: The frontend never receives or stores Gemini keys
+- **Web Search**: Fast and Smart use Gemini web grounding.
 - **Token Usage**: Reports can be lengthy; monitor your API usage
-- **Rate Limits**: Subject to each provider's API rate limits
+- **Rate Limits**: Subject to Gemini API rate limits
 
-For current pricing and limits, visit [Google AI Studio](https://aistudio.google.com/) and the [DeepSeek pricing page](https://api-docs.deepseek.com/quick_start/pricing).
+For current pricing and limits, visit [Google AI Studio](https://aistudio.google.com/).
 
 ## Limitations & Disclaimers
 
@@ -239,4 +229,4 @@ For issues, questions, or feature requests, please open an issue on the reposito
 
 ---
 
-**Built with Google Gemini and DeepSeek APIs**
+**Built with Google Gemini APIs**
