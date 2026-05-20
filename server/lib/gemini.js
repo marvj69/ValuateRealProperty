@@ -15,6 +15,10 @@ const DEEPSEEK_REASONING_ALIASES = Object.freeze({
   xhigh: 'max',
   max: 'max'
 });
+const GEMINI_HIGH_THINKING_MODELS = new Set([
+  'gemini-3.1-flash-lite',
+  'gemini-flash-lite-latest'
+]);
 
 export function normalizeModelName(model) {
   const selected = model || process.env.REPORT_MODEL || DEFAULT_REPORT_MODEL;
@@ -49,7 +53,7 @@ function resolveDeepSeekReasoningEffort(reasoningEffort) {
 
 function getThinkingConfigForModel(model) {
   const normalized = normalizeModelName(model).toLowerCase();
-  if (normalized.startsWith('gemini-3')) {
+  if (GEMINI_HIGH_THINKING_MODELS.has(normalized) || normalized.startsWith('gemini-3')) {
     return { thinkingLevel: 'high' };
   }
   if (normalized.includes('2.5') || normalized.includes('flash-latest')) {
