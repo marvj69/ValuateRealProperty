@@ -86,6 +86,17 @@ async function createSchema() {
   `;
 
   await sql`
+    ALTER TABLE report_jobs
+    ADD COLUMN IF NOT EXISTS input_fingerprint TEXT
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS report_jobs_user_fingerprint_updated_idx
+    ON report_jobs (user_id, input_fingerprint, updated_at DESC)
+    WHERE input_fingerprint IS NOT NULL
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS report_usage_counters (
       user_id TEXT NOT NULL,
       user_email TEXT NOT NULL,
@@ -162,6 +173,70 @@ async function createSchema() {
   await sql`
     CREATE INDEX IF NOT EXISTS report_usage_events_job_idx
     ON report_usage_events (report_job_id)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS report_artifacts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      user_email TEXT NOT NULL DEFAULT '',
+      report_job_id TEXT,
+      input_fingerprint TEXT NOT NULL,
+      stage TEXT NOT NULL,
+      stage_key TEXT NOT NULL DEFAULT 'default',
+      model TEXT NOT NULL,
+      prompt_hash TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      content JSONB NOT NULL DEFAULT '{}'::jsonb,
+      token_usage JSONB NOT NULL DEFAULT '{}'::jsonb,
+      latency_ms INTEGER,
+      cache_hits INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (user_id, report_job_id, input_fingerprint, stage, stage_key, model, request_hash)
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS report_artifacts_report_idx
+    ON report_artifacts (report_job_id, stage, stage_key)
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS report_artifacts_user_fingerprint_stage_idx
+    ON report_artifacts (user_id, input_fingerprint, stage, updated_at DESC)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS api_usage_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      user_email TEXT NOT NULL DEFAULT '',
+      report_job_id TEXT,
+      input_fingerprint TEXT,
+      stage TEXT NOT NULL,
+      stage_key TEXT NOT NULL DEFAULT 'default',
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      cache_status TEXT NOT NULL CHECK (cache_status IN ('hit', 'miss', 'race_hit')),
+      input_tokens INTEGER,
+      output_tokens INTEGER,
+      total_tokens INTEGER,
+      token_usage JSONB NOT NULL DEFAULT '{}'::jsonb,
+      latency_ms INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS api_usage_events_user_created_idx
+    ON api_usage_events (user_id, created_at DESC)
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS api_usage_events_report_stage_idx
+    ON api_usage_events (report_job_id, stage, created_at DESC)
   `;
 }
 

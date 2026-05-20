@@ -37,7 +37,7 @@ Choose between two analysis approaches:
 
 ### Prerequisites
 - A modern web browser (Chrome, Firefox, Safari, Edge)
-- Google Gemini and OpenAI API keys configured as server environment variables
+- Google Gemini and DeepSeek API keys configured as server environment variables
 - Vercel Postgres / Neon connection environment variables
 - An `AUTH_SESSION_SECRET` for the built-in signed-cookie auth flow
 - A Resend API key and verified sender address for production password recovery emails
@@ -61,7 +61,7 @@ Choose between two analysis approaches:
    ```bash
    cp .env.example .env
    ```
-   Fill in `GEMINI_API_KEY`, `AUTH_SESSION_SECRET`, `CRON_SECRET`, and your Vercel Postgres / Neon connection values.
+   Fill in `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`, `AUTH_SESSION_SECRET`, `CRON_SECRET`, and your Vercel Postgres / Neon connection values.
 
 4. **Run with Vercel-compatible API routes**
    ```bash
@@ -122,7 +122,7 @@ Choose between two analysis approaches:
 - **Frontend**: Vanilla JavaScript with Tailwind CSS
 - **Backend**: Vercel API Functions under `api/`
 - **Async Processing**: `POST /api/reports` creates a queued job, returns a report ID, and starts backend processing with `waitUntil`; `/api/worker` can process queued/stale jobs on a cron schedule
-- **AI Integration**: Google Gemini API plus OpenAI Responses API with web grounding, called only from backend functions
+- **AI Integration**: Google Gemini API plus DeepSeek Chat Completions API, called only from backend functions
 - **Storage**: Postgres tables `app_users`, `report_jobs`, `report_usage_counters`, and `report_usage_events`, with reports scoped by authenticated `user_id`
 - **Service Worker**: Static/offline asset caching only
 - **PWA**: Installable Progressive Web App with manifest
@@ -145,8 +145,9 @@ Choose between two analysis approaches:
 
 ### Required Environment Variables
 - `GEMINI_API_KEY`: server-side Gemini key
-- `OPENAI_API_KEY`: server-side OpenAI key used by the Experimental GPT-5.5 workflow
-- `OPENAI_REASONING_EFFORT`: optional OpenAI reasoning effort override, default `medium`
+- `DEEPSEEK_API_KEY`: server-side DeepSeek key used by the Experimental workflow
+- `DEEPSEEK_REASONING_EFFORT`: optional DeepSeek reasoning effort override, default `high`
+- `DEEPSEEK_BASE_URL`: optional DeepSeek-compatible base URL, default `https://api.deepseek.com`
 - `AUTH_SESSION_SECRET`: long random string used to sign sessions
 - `CRON_SECRET`: bearer token for the scheduled worker endpoint
 - `REPORT_MODEL`: optional default report model choice
@@ -170,7 +171,7 @@ Note: attachments are submitted directly to the report creation API and are limi
 ### Supported Models
 - Fast (`gemini-flash-lite-latest`) - 5 reports per user per week by default
 - Smart (`gemini-3-flash-preview`) - 5 reports per user per week by default
-- Experimental - 5 reports per user per week by default; runs 6 concurrent drafts with OpenAI `gpt-5.5` at `medium` reasoning effort, then uses the same merge, validation, and compliance workflow with `gpt-5.5`
+- Experimental - 5 reports per user per week by default; runs 6 concurrent drafts with DeepSeek `deepseek-v4-pro` at `high` reasoning effort, then uses the same merge, validation, and compliance workflow with `deepseek-v4-pro`
 
 Usage limits are enforced server-side with an atomic Postgres quota counter and durable usage ledger. Deleting report history does not reset quota, retrying a report consumes quota, and direct API calls are restricted to the supported Fast/Smart/Experimental model choices.
 
@@ -204,15 +205,15 @@ valuate/
 
 ## API Usage & Costs
 
-This application uses Google Gemini and OpenAI APIs from backend functions only. Key points:
+This application uses Google Gemini and DeepSeek APIs from backend functions only. Key points:
 
-- **Server Keys Required**: Configure `GEMINI_API_KEY` and `OPENAI_API_KEY` in the deployment environment
-- **No Browser Secrets**: The frontend never receives or stores Gemini or OpenAI keys
-- **Web Search**: Uses provider-hosted web grounding/search features, which may have additional costs
+- **Server Keys Required**: Configure `GEMINI_API_KEY` and `DEEPSEEK_API_KEY` in the deployment environment
+- **No Browser Secrets**: The frontend never receives or stores Gemini or DeepSeek keys
+- **Web Search**: Fast and Smart use Gemini web grounding. DeepSeek Experimental does not receive PDF/image attachments or hosted web-search tools through this integration.
 - **Token Usage**: Reports can be lengthy; monitor your API usage
 - **Rate Limits**: Subject to each provider's API rate limits
 
-For current pricing and limits, visit [Google AI Studio](https://aistudio.google.com/) and the [OpenAI pricing page](https://platform.openai.com/docs/pricing).
+For current pricing and limits, visit [Google AI Studio](https://aistudio.google.com/) and the [DeepSeek pricing page](https://api-docs.deepseek.com/quick_start/pricing).
 
 ## Limitations & Disclaimers
 
@@ -238,4 +239,4 @@ For issues, questions, or feature requests, please open an issue on the reposito
 
 ---
 
-**Built with Google Gemini and OpenAI APIs**
+**Built with Google Gemini and DeepSeek APIs**

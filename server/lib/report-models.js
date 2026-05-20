@@ -1,8 +1,8 @@
 export const FAST_REPORT_MODEL = 'gemini-flash-lite-latest';
 export const SMART_REPORT_MODEL = 'gemini-3-flash-preview';
 export const EXPERIMENTAL_REPORT_MODEL = 'experimental';
-export const OPENAI_EXPERIMENTAL_REPORT_MODEL = 'gpt-5.5';
-export const OPENAI_EXPERIMENTAL_REASONING_EFFORT = 'medium';
+export const DEEPSEEK_EXPERIMENTAL_REPORT_MODEL = 'deepseek-v4-pro';
+export const DEEPSEEK_EXPERIMENTAL_REASONING_EFFORT = 'high';
 export const DEFAULT_REPORT_MODEL = FAST_REPORT_MODEL;
 
 const LEGACY_REPORT_MODEL_ALIASES = Object.freeze({
@@ -12,7 +12,7 @@ const LEGACY_REPORT_MODEL_ALIASES = Object.freeze({
 
 const EXPERIMENTAL_DRAFT_COUNT = 6;
 const EXPERIMENTAL_DRAFT_MODELS = Object.freeze(
-  Array.from({ length: EXPERIMENTAL_DRAFT_COUNT }, () => OPENAI_EXPERIMENTAL_REPORT_MODEL)
+  Array.from({ length: EXPERIMENTAL_DRAFT_COUNT }, () => DEEPSEEK_EXPERIMENTAL_REPORT_MODEL)
 );
 
 export const REPORT_MODEL_OPTIONS = Object.freeze([
@@ -33,10 +33,10 @@ export const REPORT_MODEL_OPTIONS = Object.freeze([
   Object.freeze({
     tier: 'experimental',
     label: 'Experimental',
-    provider: 'openai',
+    provider: 'deepseek',
     model: EXPERIMENTAL_REPORT_MODEL,
-    supportModel: OPENAI_EXPERIMENTAL_REPORT_MODEL,
-    reasoningEffort: OPENAI_EXPERIMENTAL_REASONING_EFFORT,
+    supportModel: DEEPSEEK_EXPERIMENTAL_REPORT_MODEL,
+    reasoningEffort: DEEPSEEK_EXPERIMENTAL_REASONING_EFFORT,
     reportCount: EXPERIMENTAL_DRAFT_MODELS.length,
     draftConcurrency: EXPERIMENTAL_DRAFT_COUNT,
     draftModels: EXPERIMENTAL_DRAFT_MODELS

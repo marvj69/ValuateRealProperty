@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import { ensureSchema, sql } from './db.js';
 import { HttpError } from './http.js';
 import { buildReportPrompt } from './prompts.js';
-import { callGemini, withRetries } from './gemini.js';
+import { withRetries } from './gemini.js';
+import { buildReportInputFingerprint, callGeminiWithCache } from './report-artifacts.js';
 import {
   DEFAULT_REPORT_MODEL,
   REPORT_MODEL_OPTIONS,
@@ -19,6 +20,7 @@ const PROCESSING_STALE_MINUTES = 10;
 const WORKER_CONCURRENCY = 8;
 const REPORT_DRAFT_TIMEOUT_MS = 90_000;
 const MAX_STALE_PROCESSING_ATTEMPTS = 2;
+const DUPLICATE_REPORT_WINDOW_MINUTES = 10;
 const DEFAULT_WEEKLY_REPORT_LIMIT = 5;
 const MAX_CONFIGURED_WEEKLY_REPORT_LIMIT = 1000;
 const DEFAULT_USAGE_LIMIT_TIME_ZONE = 'America/Detroit';
@@ -168,6 +170,13 @@ export function sanitizeReportInput(input = {}) {
     ? input.reportAudience
     : 'seller';
   const modelSelection = resolveReportModel(input.model);
+  if (modelSelection.provider === 'deepseek' && attachments.length > 0) {
+    throw new HttpError(400, 'Experimental reports use DeepSeek and do not support PDF or image attachments. Remove attachments or choose Fast/Smart for attachment-based reports.', {
+      field: 'attachments',
+      provider: 'deepseek',
+      model: modelSelection.supportModel || modelSelection.model
+    });
+  }
   const reportCount = modelSelection.reportCount || asReportCount(input.reportCount);
   const draftModels = Array.isArray(modelSelection.draftModels)
     ? modelSelection.draftModels.slice(0, reportCount)
@@ -215,6 +224,81 @@ function normalizeUsageLimitMetadata(row, payload) {
     remaining: Math.max(0, limit - used),
     resetAt: normalizeDate(row.quota_window_end)
   };
+}
+
+function countReusableReports(reports = []) {
+  return reports.filter((report) => report?.success && report.content).length;
+}
+
+function normalizeReusableReports(existingReports = [], payload = {}) {
+  const reportCount = Number(payload.reportCount) || DEFAULT_REPORT_COUNT;
+  const draftModelPlan = getDraftModelPlan(payload, reportCount);
+  const reusableReports = Array.from({ length: reportCount }, () => null);
+  if (!Array.isArray(existingReports)) return reusableReports;
+
+  for (const report of existingReports) {
+    const index = Number.parseInt(report?.index, 10);
+    if (!Number.isInteger(index) || index < 0 || index >= reportCount) continue;
+    if (!report?.success || !report.content) continue;
+
+    const expectedModel = draftModelPlan[index];
+    if (report.model && expectedModel && report.model !== expectedModel) continue;
+
+    reusableReports[index] = {
+      index,
+      success: true,
+      model: report.model || expectedModel,
+      content: report.content,
+      searchSuggestions: Array.isArray(report.searchSuggestions) ? report.searchSuggestions : [],
+      valuations: report.valuations || extractValuations(report.content)
+    };
+  }
+
+  return reusableReports;
+}
+
+function buildProgress(payload, reports = [], phase = 'queued') {
+  return {
+    total: payload.reportCount,
+    completed: countReusableReports(reports),
+    phase
+  };
+}
+
+function buildArtifactContext(row, inputFingerprint) {
+  return {
+    userId: row.user_id,
+    userEmail: row.user_email,
+    reportId: row.id,
+    inputFingerprint
+  };
+}
+
+async function findRecentDuplicateReport(user, inputFingerprint) {
+  if (!inputFingerprint) return null;
+  const { rows } = await sql`
+    SELECT *
+    FROM report_jobs
+    WHERE user_id = ${user.userId}
+      AND input_fingerprint = ${inputFingerprint}
+      AND status IN ('queued', 'processing', 'completed')
+      AND updated_at > now() - (${DUPLICATE_REPORT_WINDOW_MINUTES} || ' minutes')::interval
+    ORDER BY updated_at DESC
+    LIMIT 1
+  `;
+  return rows[0]
+    ? normalizeReportRow(rows[0], { includePayload: true, includeReports: true })
+    : null;
+}
+
+async function persistInputFingerprint(id, inputFingerprint) {
+  if (!id || !inputFingerprint) return;
+  await sql`
+    UPDATE report_jobs
+    SET input_fingerprint = ${inputFingerprint}
+    WHERE id = ${id}
+      AND input_fingerprint IS DISTINCT FROM ${inputFingerprint}
+  `;
 }
 
 export async function getReportUsageForUser(user) {
@@ -346,6 +430,7 @@ export function normalizeReportRow(row, { includePayload = false, includeReports
     reasoningEffort: payload.reasoningEffort || null,
     draftConcurrency: payload.draftConcurrency || null,
     draftModels: Array.isArray(payload.draftModels) ? payload.draftModels : [],
+    inputFingerprint: row.input_fingerprint || null,
     usageLimit: normalizeUsageLimitMetadata(row, payload)
   };
 
@@ -374,6 +459,12 @@ export function normalizeReportRow(row, { includePayload = false, includeReports
 export async function createReportJob(user, input) {
   await ensureSchema();
   const payload = sanitizeReportInput(input);
+  const inputFingerprint = buildReportInputFingerprint(payload);
+  const duplicateReport = await findRecentDuplicateReport(user, inputFingerprint);
+  if (duplicateReport) {
+    return duplicateReport;
+  }
+
   const id = crypto.randomUUID();
   const progress = { total: payload.reportCount, completed: 0, phase: 'queued' };
 
@@ -385,6 +476,7 @@ export async function createReportJob(user, input) {
         user_email,
         status,
         payload,
+        input_fingerprint,
         report_count,
         reports,
         progress
@@ -395,6 +487,7 @@ export async function createReportJob(user, input) {
         ${user.email},
         'queued',
         ${jsonParam(payload)}::jsonb,
+        ${inputFingerprint},
         ${payload.reportCount},
         '[]'::jsonb,
         ${jsonParam(progress)}::jsonb
@@ -480,6 +573,7 @@ export async function createReportJob(user, input) {
         user_email,
         status,
         payload,
+        input_fingerprint,
         report_count,
         reports,
         progress
@@ -490,6 +584,7 @@ export async function createReportJob(user, input) {
         ${user.email},
         'queued',
         ${jsonParam(payload)}::jsonb,
+        ${inputFingerprint},
         ${payload.reportCount},
         '[]'::jsonb,
         ${jsonParam(progress)}::jsonb
@@ -658,7 +753,9 @@ export async function retryReportForUser(user, id) {
   }
 
   const payload = sanitizeReportInput(existing.payload || {});
-  const progress = { total: payload.reportCount, completed: 0, phase: 'queued' };
+  const inputFingerprint = existing.input_fingerprint || buildReportInputFingerprint(payload);
+  const reusableReports = normalizeReusableReports(existing.reports || [], payload);
+  const progress = buildProgress(payload, reusableReports, 'queued');
 
   if (hasUnlimitedReportLimits(user)) {
     const { rows } = await sql`
@@ -675,8 +772,9 @@ export async function retryReportForUser(user, id) {
         SET
           status = 'queued',
           payload = ${jsonParam(payload)}::jsonb,
+          input_fingerprint = ${inputFingerprint},
           report_count = ${payload.reportCount},
-          reports = '[]'::jsonb,
+          reports = ${jsonParam(reusableReports)}::jsonb,
           final_report = NULL,
           progress = ${jsonParam(progress)}::jsonb,
           error = NULL,
@@ -795,8 +893,9 @@ export async function retryReportForUser(user, id) {
       SET
         status = 'queued',
         payload = ${jsonParam(payload)}::jsonb,
+        input_fingerprint = ${inputFingerprint},
         report_count = ${payload.reportCount},
-        reports = '[]'::jsonb,
+        reports = ${jsonParam(reusableReports)}::jsonb,
         final_report = NULL,
         progress = ${jsonParam(progress)}::jsonb,
         error = NULL,
@@ -1027,22 +1126,40 @@ async function processClaimedReport(row) {
     payload = sanitizeReportInput(row.payload || {});
     const prompt = buildReportPrompt(payload);
     reportCount = payload.reportCount;
+    const inputFingerprint = row.input_fingerprint || buildReportInputFingerprint(payload);
+    await persistInputFingerprint(row.id, inputFingerprint);
+    const artifactContext = buildArtifactContext(row, inputFingerprint);
     const draftModelPlan = getDraftModelPlan(payload, reportCount);
     const supportModel = asString(payload.supportModel || payload.model, 200) || DEFAULT_REPORT_MODEL;
     const draftConcurrency = Math.min(
       WORKER_CONCURRENCY,
       Math.max(1, Number.parseInt(payload.draftConcurrency, 10) || WORKER_CONCURRENCY)
     );
-    reports = Array.from({ length: reportCount }, () => null);
+    reports = normalizeReusableReports(row.reports || [], payload);
+    completed = countReusableReports(reports);
+    const missingDraftIndexes = reports
+      .map((report, index) => (report?.success && report.content ? null : index))
+      .filter((index) => index !== null);
+
+    if (completed > 0) {
+      await updateReportProgress(row.id, reports, {
+        total: reportCount,
+        completed,
+        phase: 'reports'
+      });
+    }
 
     await runPool(
-      Array.from({ length: reportCount }, (_, index) => index),
+      missingDraftIndexes,
       draftConcurrency,
       async (index) => {
         const draftModel = draftModelPlan[index] || supportModel;
         try {
           const result = await withRetries(
-            () => callGemini({
+            () => callGeminiWithCache({
+              artifactContext,
+              stage: 'draft',
+              stageKey: `index-${index}`,
               model: draftModel,
               prompt,
               enableSearch: payload.enableSearch,
@@ -1096,6 +1213,7 @@ async function processClaimedReport(row) {
       model: supportModel,
       reasoningEffort: payload.reasoningEffort,
       enableSearch: payload.enableSearch,
+      artifactContext,
       onProgressPhase: (phase) => updateReportProgress(row.id, reports, {
         total: reportCount,
         completed,

@@ -6,7 +6,8 @@ import {
   buildValidationPrompt,
   buildValueExtractionPrompt
 } from './prompts.js';
-import { callGemini, isOpenAIModel } from './gemini.js';
+import { isDeepSeekModel } from './gemini.js';
+import { callGeminiWithCache } from './report-artifacts.js';
 
 const COMPLIANCE_REVIEW_MODEL = 'gemini-flash-lite-latest';
 const COMPLIANCE_REVISION_MODEL = 'gemini-3-flash-preview';
@@ -25,7 +26,7 @@ const COMP_VALIDATION_HEADING_PATTERN = /\b(comparable|comparables|comp\b|comps\
 const COMP_VALIDATION_LINE_PATTERN = /\b(comparable|comparables|comp\b|comps\b|sale|sales|sold|closed|active|pending|listing|listings|competition|adjustment|mls|price\/sqft)\b/i;
 
 function resolveComplianceRevisionModel(model) {
-  return isOpenAIModel(model) ? model : COMPLIANCE_REVISION_MODEL;
+  return isDeepSeekModel(model) ? model : COMPLIANCE_REVISION_MODEL;
 }
 
 function parseNumber(value) {
@@ -364,14 +365,23 @@ ${rejectedRows.length ? rejectedRows.join('\n') : '- None reported.'}
 ${evidence.validationNotes.length ? evidence.validationNotes.map((note) => `- ${note}`).join('\n') : '- All verified comps above met the minimum evidence standard.'}`;
 }
 
-export async function validateCompsAndListings({ reportsText, model, reasoningEffort, enableSearch }) {
+export async function validateCompsAndListings({
+  reportsText,
+  model,
+  reasoningEffort,
+  enableSearch,
+  artifactContext
+}) {
   let lastError = null;
   const validationReportsText = prepareReportsTextForValidation(reportsText);
   const validationModel = model || COMP_VALIDATION_MODEL;
 
   for (let attempt = 1; attempt <= MAX_COMP_VALIDATION_ATTEMPTS; attempt += 1) {
     try {
-      const result = await callGemini({
+      const result = await callGeminiWithCache({
+        artifactContext,
+        stage: 'comp_validation',
+        stageKey: `attempt-${attempt}`,
         model: validationModel,
         prompt: buildValidationPrompt(validationReportsText, {
           attempt,
@@ -383,7 +393,14 @@ export async function validateCompsAndListings({ reportsText, model, reasoningEf
         maxOutputTokens: 16384,
         temperature: 0.2,
         reasoningEffort,
-        timeoutMs: COMP_VALIDATION_TIMEOUT_MS
+        timeoutMs: COMP_VALIDATION_TIMEOUT_MS,
+        validateResult: (candidateResult) => {
+          const candidateEvidence = parseComparableValidationResponse(candidateResult.content);
+          const candidateVerifiedCount = countVerifiedComparables(candidateEvidence);
+          if (candidateVerifiedCount < MIN_VERIFIED_COMP_COUNT) {
+            throw new Error('No comparable sales, active listings, or pending listings met the minimum verification standard.');
+          }
+        }
       });
 
       const evidence = parseComparableValidationResponse(result.content);
@@ -408,11 +425,13 @@ export async function validateCompsAndListings({ reportsText, model, reasoningEf
   throw new Error(`Comparable validation could not verify any usable comparable sales, active listings, or pending listings after ${MAX_COMP_VALIDATION_ATTEMPTS} attempts. Final report was not generated because unverified comps are blocked. Last validation error: ${lastError?.message || 'Unknown validation error'}`);
 }
 
-export async function inferValueRangeFromReport({ reportText, model, reasoningEffort }) {
+export async function inferValueRangeFromReport({ reportText, model, reasoningEffort, artifactContext }) {
   const cleanedText = String(reportText || '').replace(/\s+/g, ' ').trim();
   if (!cleanedText) return null;
 
-  const result = await callGemini({
+  const result = await callGeminiWithCache({
+    artifactContext,
+    stage: 'value_extract',
     model: model || COMP_VALIDATION_MODEL,
     prompt: buildValueExtractionPrompt(cleanedText),
     enableSearch: false,
@@ -447,11 +466,13 @@ export async function inferValueRangeFromReport({ reportText, model, reasoningEf
     : { rangeLow: rangeHigh, rangeHigh: rangeLow };
 }
 
-export async function inferAddressFromFinalReport({ reportText, model, reasoningEffort }) {
+export async function inferAddressFromFinalReport({ reportText, model, reasoningEffort, artifactContext }) {
   const cleanedText = String(reportText || '').replace(/\s+/g, ' ').trim();
   if (!cleanedText) return null;
 
-  const result = await callGemini({
+  const result = await callGeminiWithCache({
+    artifactContext,
+    stage: 'address_extract',
     model: model || COMP_VALIDATION_MODEL,
     prompt: buildAddressExtractionPrompt(cleanedText),
     enableSearch: false,
@@ -560,9 +581,14 @@ export async function reviewFinalReportCompliance({
   reportText,
   reportAudience,
   model = COMPLIANCE_REVIEW_MODEL,
-  reasoningEffort
+  reasoningEffort,
+  artifactContext,
+  round = 0
 }) {
-  const result = await callGemini({
+  const result = await callGeminiWithCache({
+    artifactContext,
+    stage: 'compliance_review',
+    stageKey: `round-${round}`,
     model,
     prompt: buildComplianceReviewPrompt({ reportText, reportAudience }),
     enableSearch: false,
@@ -570,7 +596,10 @@ export async function reviewFinalReportCompliance({
     attachments: [],
     maxOutputTokens: 8192,
     reasoningEffort,
-    timeoutMs: COMPLIANCE_REVIEW_TIMEOUT_MS
+    timeoutMs: COMPLIANCE_REVIEW_TIMEOUT_MS,
+    validateResult: (candidateResult) => {
+      parseComplianceReviewResponse(candidateResult.content);
+    }
   });
 
   return {
@@ -585,9 +614,14 @@ async function reviseFinalReportForCompliance({
   findings,
   reportAudience,
   model = COMPLIANCE_REVISION_MODEL,
-  reasoningEffort
+  reasoningEffort,
+  artifactContext,
+  round = 0
 }) {
-  const result = await callGemini({
+  const result = await callGeminiWithCache({
+    artifactContext,
+    stage: 'compliance_revision',
+    stageKey: `round-${round}`,
     model,
     prompt: buildComplianceRevisionPrompt({ reportText, findings, reportAudience }),
     enableSearch: false,
@@ -595,7 +629,12 @@ async function reviseFinalReportForCompliance({
     attachments: [],
     maxOutputTokens: 65536,
     reasoningEffort,
-    timeoutMs: COMPLIANCE_REVISION_TIMEOUT_MS
+    timeoutMs: COMPLIANCE_REVISION_TIMEOUT_MS,
+    validateResult: (candidateResult) => {
+      if (!cleanMarkdownResponse(candidateResult.content)) {
+        throw new Error('Compliance revision returned an empty report.');
+      }
+    }
   });
 
   const revisedReport = cleanMarkdownResponse(result.content);
@@ -610,7 +649,8 @@ export async function runFinalComplianceReview({
   reportAudience,
   model = COMPLIANCE_REVIEW_MODEL,
   reasoningEffort,
-  onProgressPhase
+  onProgressPhase,
+  artifactContext
 }) {
   let currentReportText = String(reportText || '').trim();
   if (!currentReportText) {
@@ -626,7 +666,9 @@ export async function runFinalComplianceReview({
       reportText: currentReportText,
       reportAudience,
       model,
-      reasoningEffort
+      reasoningEffort,
+      artifactContext,
+      round
     });
     attempts.push(review);
 
@@ -648,7 +690,9 @@ export async function runFinalComplianceReview({
       findings: review.findings,
       reportAudience,
       model: revisionModel,
-      reasoningEffort
+      reasoningEffort,
+      artifactContext,
+      round
     });
     revisionRounds += 1;
 
@@ -676,7 +720,8 @@ export async function generateMergedReport({
   model,
   reasoningEffort,
   enableSearch,
-  onProgressPhase
+  onProgressPhase,
+  artifactContext
 }) {
   const reportsText = successfulReports
     .map((report, index) => `--- Report ${index + 1} ---\n${report.content}`)
@@ -687,12 +732,15 @@ export async function generateMergedReport({
     reportsText,
     model,
     reasoningEffort,
-    enableSearch
+    enableSearch,
+    artifactContext
   });
   const validatedCompsContent = comparableValidation.content;
 
   await notifyProgressPhase(onProgressPhase, 'merging');
-  const result = await callGemini({
+  const result = await callGeminiWithCache({
+    artifactContext,
+    stage: 'final_merge',
     model,
     prompt: buildFinalReportPrompt({
       reportsText,
@@ -713,7 +761,8 @@ export async function generateMergedReport({
     reportAudience,
     model,
     reasoningEffort,
-    onProgressPhase
+    onProgressPhase,
+    artifactContext
   });
   const finalContent = complianceReview.content;
 
@@ -723,7 +772,8 @@ export async function generateMergedReport({
     inferredRange = await inferValueRangeFromReport({
       reportText: finalContent,
       model,
-      reasoningEffort
+      reasoningEffort,
+      artifactContext
     });
   } catch (error) {
     inferredRange = null;
@@ -734,7 +784,8 @@ export async function generateMergedReport({
     inferredAddress = await inferAddressFromFinalReport({
       reportText: finalContent,
       model,
-      reasoningEffort
+      reasoningEffort,
+      artifactContext
     });
   } catch (error) {
     inferredAddress = null;
