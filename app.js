@@ -1894,6 +1894,7 @@
 
     function renderHistoryList(reports) {
         if (!historyList || !historyEmpty) return;
+        setHistoryLoading(false);
         historyList.innerHTML = '';
         if (!reports || reports.length === 0) {
             historyEmpty.classList.remove('hidden');
@@ -1935,6 +1936,20 @@
         });
     }
 
+    function setHistoryLoading(loading) {
+        if (!historyList) return;
+        if (loading) {
+            historyList.setAttribute('aria-busy', 'true');
+            if (historyEmpty && appState.history.length === 0) {
+                historyList.innerHTML = '';
+                historyEmpty.classList.remove('hidden');
+                historyEmpty.textContent = 'Loading saved valuations...';
+            }
+            return;
+        }
+        historyList.removeAttribute('aria-busy');
+    }
+
     function updateHistoryBadge(count) {
         if (!historyCountBadge) return;
         if (count > 0) {
@@ -1945,7 +1960,8 @@
         }
     }
 
-    async function refreshHistoryList() {
+    async function refreshHistoryList(options = {}) {
+        const { showLoading = false } = options;
         if (!appState.user) {
             appState.history = [];
             renderHistoryList([]);
@@ -1953,6 +1969,7 @@
             return;
         }
 
+        if (showLoading) setHistoryLoading(true);
         try {
             const data = await apiRequest('/api/reports');
             const reports = (data.reports || data || []).map(normalizeReport).filter(Boolean);
@@ -1961,6 +1978,12 @@
             updateHistoryBadge(reports.length);
         } catch (error) {
             console.warn('Failed to load saved valuations.', error);
+            if (showLoading && appState.history.length === 0 && historyEmpty) {
+                historyEmpty.classList.remove('hidden');
+                historyEmpty.textContent = 'Saved valuations are unavailable right now.';
+            }
+        } finally {
+            setHistoryLoading(false);
         }
     }
 
@@ -2073,12 +2096,12 @@
                 const historyOpen = historyDrawer && !historyDrawer.classList.contains('hidden');
                 if (settingsLastFocus && !historyOpen) settingsLastFocus.focus();
             }
-        }, 250);
+        }, 240);
     }
 
     function openHistoryDrawer() {
-        if (!historyDrawer) return;
-        if (!requireSignedIn()) return;
+        if (!historyDrawer) return false;
+        if (!requireSignedIn()) return false;
         historyLastFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         historyDrawer.classList.remove('hidden');
         historyDrawer.setAttribute('aria-hidden', 'false');
@@ -2086,6 +2109,7 @@
         requestAnimationFrame(() => historyDrawer.classList.add('is-open'));
         updateScrollLock();
         historyClose?.focus();
+        return true;
     }
 
     function closeHistoryDrawer() {
@@ -2100,7 +2124,7 @@
                 const settingsOpen = settingsModal && !settingsModal.classList.contains('hidden');
                 if (historyLastFocus && !settingsOpen) historyLastFocus.focus();
             }
-        }, 300);
+        }, 240);
     }
 
     function wireEvents() {
@@ -2146,13 +2170,14 @@
                 .catch((error) => console.warn('Failed to refresh usage limits.', error));
         });
 
-        historyToggle?.addEventListener('click', async () => {
-            await refreshHistoryList();
-            openHistoryDrawer();
+        historyToggle?.addEventListener('click', () => {
+            if (!openHistoryDrawer()) return;
+            refreshHistoryList({ showLoading: true })
+                .catch((error) => console.warn('Failed to load saved valuations.', error));
         });
         historyOverlay?.addEventListener('click', closeHistoryDrawer);
         historyClose?.addEventListener('click', closeHistoryDrawer);
-        historyRefresh?.addEventListener('click', refreshHistoryList);
+        historyRefresh?.addEventListener('click', () => refreshHistoryList({ showLoading: true }));
         historyClear?.addEventListener('click', async () => {
             if (!appState.history.length) return;
             const confirmed = confirm('Delete all saved valuations for this account? This cannot be undone.');

@@ -1430,9 +1430,10 @@ textarea.custom-input.no-icon,
     inset: 0;
     background: rgba(11, 18, 32, 0.46);
     opacity: 0;
-    transition: opacity var(--t-med) var(--ease);
+    transition: opacity var(--t-fast) var(--ease);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
+    will-change: opacity;
 }
 
 .settings-modal.is-open .settings-overlay { opacity: 1; }
@@ -1453,9 +1454,12 @@ textarea.custom-input.no-icon,
     box-shadow: var(--shadow-xl);
     padding: 8px 22px 24px;
     padding-bottom: calc(24px + var(--safe-bottom));
-    transform: translateY(100%);
-    transition: transform var(--t-slow) var(--ease-out);
+    transform: translate3d(0, 100%, 0);
+    transition: transform 220ms var(--ease-out);
     overscroll-behavior: contain;
+    backface-visibility: hidden;
+    contain: layout paint;
+    will-change: transform;
 }
 
 .settings-panel::before {
@@ -1469,7 +1473,7 @@ textarea.custom-input.no-icon,
 }
 
 .settings-modal.is-open .settings-panel {
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
 }
 
 .settings-panel-header {
@@ -1543,12 +1547,12 @@ textarea.custom-input.no-icon,
         margin: 24px;
         padding: 24px 26px;
         padding-bottom: 24px;
-        transform: translateY(20px);
+        transform: translate3d(0, 12px, 0);
         opacity: 0;
-        transition: transform var(--t-med) var(--ease-out), opacity var(--t-med) var(--ease-out);
+        transition: transform 200ms var(--ease-out), opacity 200ms var(--ease-out);
     }
     .settings-panel::before { display: none; }
-    .settings-modal.is-open .settings-panel { transform: translateY(0); opacity: 1; }
+    .settings-modal.is-open .settings-panel { transform: translate3d(0, 0, 0); opacity: 1; }
     .settings-panel-body { grid-template-columns: 1fr 1fr; }
     .settings-panel-body > .settings-row-full { grid-column: 1 / -1; }
 }
@@ -1608,9 +1612,10 @@ textarea.custom-input.no-icon,
     inset: 0;
     background: rgba(11, 18, 32, 0.46);
     opacity: 0;
-    transition: opacity var(--t-med) var(--ease);
+    transition: opacity var(--t-fast) var(--ease);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
+    will-change: opacity;
 }
 
 .history-drawer.is-open .history-overlay { opacity: 1; }
@@ -1621,17 +1626,20 @@ textarea.custom-input.no-icon,
     height: 100%;
     background: var(--paper);
     box-shadow: -24px 0 60px rgba(11, 18, 32, 0.22);
-    transform: translateX(100%);
-    transition: transform var(--t-slow) var(--ease-out);
+    transform: translate3d(100%, 0, 0);
+    transition: transform 220ms var(--ease-out);
     display: flex;
     flex-direction: column;
     gap: 14px;
     padding: max(20px, var(--safe-top)) 20px max(20px, var(--safe-bottom));
     border-left: 1px solid var(--ink-200);
     overscroll-behavior: contain;
+    backface-visibility: hidden;
+    contain: layout paint;
+    will-change: transform;
 }
 
-.history-drawer.is-open .history-panel { transform: translateX(0); }
+.history-drawer.is-open .history-panel { transform: translate3d(0, 0, 0); }
 
 .history-panel-header {
     display: flex;
