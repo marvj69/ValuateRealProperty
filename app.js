@@ -799,7 +799,19 @@
         const label = signedIn ? appState.user.email : 'Sign in';
 
         if (authStatusBtn) {
-            authStatusBtn.textContent = label;
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-user';
+            icon.setAttribute('aria-hidden', 'true');
+
+            const text = document.createElement('span');
+            text.textContent = signedIn ? 'Account' : 'Sign in';
+
+            authStatusBtn.replaceChildren(icon, text);
+            authStatusBtn.title = label;
+            authStatusBtn.setAttribute(
+                'aria-label',
+                signedIn ? `Open account and settings for ${label}` : 'Open account and settings'
+            );
         }
         if (authEmail && appState.user?.email) {
             authEmail.value = appState.user.email;

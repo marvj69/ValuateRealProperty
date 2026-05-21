@@ -139,6 +139,8 @@ async function createSchema() {
     DO $$
     DECLARE tier_constraint_name TEXT;
     BEGIN
+      LOCK TABLE report_usage_counters IN ACCESS EXCLUSIVE MODE;
+
       FOR tier_constraint_name IN
         SELECT constraint_record.conname
         FROM pg_constraint AS constraint_record
@@ -159,6 +161,8 @@ async function createSchema() {
     DO $$
     DECLARE tier_constraint_name TEXT;
     BEGIN
+      LOCK TABLE report_usage_events IN ACCESS EXCLUSIVE MODE;
+
       FOR tier_constraint_name IN
         SELECT constraint_record.conname
         FROM pg_constraint AS constraint_record
