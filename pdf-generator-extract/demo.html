@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Valuate PDF Generator Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Newsreader:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+    <link rel="stylesheet" href="pdf-export.css">
+    <style>
+        body {
+            margin: 0;
+            background: #f4f6f8;
+            color: #111827;
+            font-family: 'Plus Jakarta Sans', Arial, sans-serif;
+        }
+
+        main {
+            max-width: 880px;
+            margin: 0 auto;
+            padding: 32px 20px 48px;
+        }
+
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 24px;
+            line-height: 1.2;
+        }
+
+        button {
+            min-height: 44px;
+            border: 0;
+            border-radius: 6px;
+            padding: 0 16px;
+            background: #002068;
+            color: #ffffff;
+            font: inherit;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.62;
+            cursor: wait;
+        }
+
+        .preview {
+            padding: 28px;
+            border: 1px solid #d8e2e8;
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            border: 1px solid #d8e2e8;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <div class="toolbar">
+            <h1>Valuate PDF Generator Demo</h1>
+            <button id="downloadPdfBtn" type="button">Download PDF</button>
+        </div>
+
+        <section id="finalReportContent" class="preview">
+            <h1>Final valuation report</h1>
+            <p><strong>Estimated Market Value Range:</strong> $420,000 - $455,000</p>
+            <p>This sample content shows how a completed valuation report is wrapped by the PDF generator. Replace this block with the generated report HTML from your app.</p>
+            <h2>Comparable sales</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Address</th>
+                        <th>Sale price</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>100 Example Road</td>
+                        <td>$435,000</td>
+                        <td>Similar condition and lot profile.</td>
+                    </tr>
+                    <tr>
+                        <td>210 Sample Avenue</td>
+                        <td>$448,000</td>
+                        <td>Recently renovated with smaller acreage.</td>
+                    </tr>
+                </tbody>
+            </table>
+            <h2>Market notes</h2>
+            <p>Demand remains strongest for well-presented homes with defensible pricing and clear supporting data.</p>
+        </section>
+    </main>
+
+    <script src="vendor/marked.min.js"></script>
+    <script src="vendor/html2pdf.bundle.min.js"></script>
+    <script src="pdf-generator.js"></script>
+    <script>
+        const button = document.getElementById('downloadPdfBtn');
+        button.addEventListener('click', async () => {
+            const originalLabel = button.textContent;
+            button.disabled = true;
+            button.textContent = 'Preparing PDF...';
+            try {
+                await window.ValuatePdfGenerator.download({
+                    contentElement: document.getElementById('finalReportContent'),
+                    address: '123 Sample Street, Marquette, MI',
+                    audience: 'seller'
+                });
+            } catch (error) {
+                console.error(error);
+                alert(error.message || 'Failed to generate PDF.');
+            } finally {
+                button.disabled = false;
+                button.textContent = originalLabel;
+            }
+        });
+    </script>
+</body>
+</html>

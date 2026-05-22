@@ -1735,7 +1735,6 @@
                         <img class="pdf-logo pdf-logo-cb" src="${coldwellLogo}" alt="Coldwell Banker Schmidt Realtors">
                     </div>
                     <div class="pdf-title-block">
-                        <p class="pdf-eyebrow">AI valuation engine</p>
                         <h1>Comparative Market Analysis</h1>
                         <p class="pdf-address">${escapeHtml(address)}</p>
                     </div>
