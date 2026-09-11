@@ -5,7 +5,7 @@ export const META_REPORT_MODEL = 'muse-spark-1.3-contributor';
 export const DEFAULT_REPORT_MODEL = FAST_REPORT_MODEL;
 
 export function getReportStageReasoningEffort(stage) {
-  return stage === 'draft' || stage === 'final_merge' ? 'max' : 'medium';
+  return stage === 'draft' || stage === 'final_merge' ? 'high' : 'medium';
 }
 
 const LEGACY_REPORT_MODEL_ALIASES = Object.freeze({

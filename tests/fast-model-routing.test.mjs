@@ -20,7 +20,7 @@ const input = sanitizeReportInput({
 assert.equal(input.modelTier, 'fast');
 assert.equal(input.model, FAST_REPORT_MODEL);
 assert.equal(input.supportModel, META_REPORT_MODEL);
-assert.equal(input.reasoningEffort, 'max');
+assert.equal(input.reasoningEffort, 'high');
 assert.deepEqual(getDraftModelPlan(input, input.reportCount), [
   META_REPORT_MODEL,
   META_REPORT_MODEL,
@@ -150,7 +150,7 @@ assert.equal(finalReport.inferredAddress, '123 Fast Lane, Marquette, MI');
 assert.equal(calls.length, 7);
 assert.deepEqual([...new Set(calls.map((call) => call.model))], [META_REPORT_MODEL]);
 assert.deepEqual(calls.map((call) => call.reasoningEffort), [
-  'medium', 'max', 'medium', 'medium', 'medium', 'medium', 'medium'
+  'medium', 'high', 'medium', 'medium', 'medium', 'medium', 'medium'
 ]);
 
 const smartInput = sanitizeReportInput({
@@ -163,7 +163,7 @@ const smartInput = sanitizeReportInput({
 assert.equal(smartInput.modelTier, 'smart');
 assert.equal(smartInput.model, SMART_REPORT_MODEL);
 assert.equal(smartInput.supportModel, META_REPORT_MODEL);
-assert.equal(smartInput.reasoningEffort, 'max');
+assert.equal(smartInput.reasoningEffort, 'high');
 
 calls.length = 0;
 complianceReviews = 0;
@@ -180,7 +180,7 @@ const smartFinalReport = await generateMergedReport({
   reportAudience: 'seller',
   model: smartInput.supportModel,
   // A saved or direct caller's old effort must not override stage routing.
-  reasoningEffort: 'high',
+  reasoningEffort: 'max',
   enableSearch: smartInput.enableSearch
 });
 
@@ -194,23 +194,23 @@ assert.equal(smartMergeCalls.length, 1);
 assert.equal(smartMergeCalls[0].model, META_REPORT_MODEL);
 assert.equal(smartFinalReport.complianceReview.model, META_REPORT_MODEL);
 assert.deepEqual(calls.map((call) => call.reasoningEffort), [
-  'medium', 'max', 'medium', 'medium', 'medium', 'medium', 'medium'
+  'medium', 'high', 'medium', 'medium', 'medium', 'medium', 'medium'
 ]);
 
 // Exercise the same request boundary used by every draft, including stale
 // queued settings. Assert the actual Meta request body, not just presets.
 calls.length = 0;
 for (const model of getDraftModelPlan(input, input.reportCount)) {
-  await callMetaWithCache({stage:'draft', model, prompt:'Generate test draft', reasoningEffort:'low'});
+  await callMetaWithCache({stage:'draft', model, prompt:'Generate test draft', reasoningEffort:'max'});
 }
 assert.equal(calls.length, input.reportCount);
-assert.ok(calls.every((call) => call.model === META_REPORT_MODEL && call.reasoningEffort === 'max'));
+assert.ok(calls.every((call) => call.model === META_REPORT_MODEL && call.reasoningEffort === 'high'));
 for (const stage of [undefined, 'future_support_stage']) {
   await callMetaWithCache({stage, prompt:'Auxiliary test call', reasoningEffort:'max'});
   assert.equal(calls.at(-1).reasoningEffort, 'medium');
 }
 
-console.log('Both modes verified: drafts and merge use max; validation, compliance, and extraction use medium.');
+console.log('Both modes verified: drafts and merge use high; validation, compliance, and extraction use medium.');
 
 // Existing saved selections retain their quota tier and migrate to Meta.
 for (const [legacy, expectedTier] of [
@@ -225,7 +225,7 @@ for (const [legacy, expectedTier] of [
   assert.equal(migrated.modelTier,expectedTier);
   assert.equal(migrated.modelProvider,'meta');
   assert.equal(migrated.supportModel,META_REPORT_MODEL);
-  assert.equal(migrated.reasoningEffort,'max');
+  assert.equal(migrated.reasoningEffort,'high');
   assert.deepEqual(getDraftModelPlan({...migrated,draftModels:['old-provider/model']},2),[META_REPORT_MODEL,META_REPORT_MODEL]);
 }
 assert.throws(()=>sanitizeReportInput({propertyAddress:'Synthetic test',model:'unlisted-model'}),/Unsupported AI model/);
