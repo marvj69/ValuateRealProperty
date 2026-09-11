@@ -1,6 +1,6 @@
-// Shared by the page and service worker. Never put an API key in this file.
+// Server-side Meta Responses client. Credentials are supplied by the environment.
 // Protocol: https://dev.meta.ai/docs/protocols/responses
-const MetaAI = (() => {
+export const MetaAI = (() => {
     const service = 'meta';
     const model = 'muse-spark-1.3-contributor';
     const endpoint = 'https://api.meta.ai/v1/responses';
@@ -66,8 +66,8 @@ const MetaAI = (() => {
             model,
             input: buildInput(prompt, attachments),
             store: false,
-            max_output_tokens: costMode ? 8192 : (experimental ? 65536 : 32768),
-            reasoning: { effort: costMode ? 'low' : (experimental ? 'high' : 'medium') }
+            max_output_tokens: Math.min(131072, Math.max(8192, Number(options.maxOutputTokens) || (costMode ? 8192 : (experimental ? 65536 : 32768)))),
+            reasoning: { effort: options.reasoningEffort || (costMode ? 'low' : (experimental ? 'high' : 'medium')) }
         };
         if (enableSearch) body.tools = [{ type: 'web_search' }];
         for (let attempt = 0; attempt < 4; attempt++) {
@@ -77,7 +77,8 @@ const MetaAI = (() => {
                 body: JSON.stringify(body),
                 cache: 'no-store',
                 credentials: 'omit',
-                redirect: 'error'
+                redirect: 'error',
+                signal: options.signal
             });
             let data;
             try {
@@ -104,7 +105,20 @@ const MetaAI = (() => {
             }
             const content = extractText(data);
             if (!content) throw new Error('Meta AI returned no report text.');
-            return { content, searchSuggestions: [] };
+            const usage = data.usage || {};
+            return {
+                content,
+                searchSuggestions: [],
+                provider: service,
+                model,
+                usage: {
+                    inputTokens: usage.input_tokens ?? null,
+                    outputTokens: usage.output_tokens ?? null,
+                    totalTokens: usage.total_tokens ?? null,
+                    thoughtsTokens: usage.output_tokens_details?.reasoning_tokens ?? null,
+                    raw: usage
+                }
+            };
         }
     }
 

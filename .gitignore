@@ -1,5 +1,8 @@
 .DS_Store
-
+node_modules/
 .env
 .env.*
-*.local.js
+!.env.example
+.vercel
+.env*.local
+.env*

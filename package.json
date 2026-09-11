@@ -1,0 +1,21 @@
+{
+  "name": "valuate-real-property",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "build": "npm run build:css && npm run check",
+    "build:css": "BROWSERSLIST_IGNORE_OLD_DATA=1 tailwindcss -c tailwind.config.cjs -i ./src/tailwind.css -o ./tailwind.css --minify",
+    "check": "find api server -name '*.js' -print0 | xargs -0 -n1 node --check && node tests/fast-model-routing.test.mjs && node --test tests/*.test.cjs && node --check app.js && node --check service-worker.js"
+  },
+  "dependencies": {
+    "@vercel/functions": "^3.5.1",
+    "@vercel/postgres": "^0.10.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  }
+}

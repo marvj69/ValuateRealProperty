@@ -2,342 +2,422 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
     <title>Market Intelligence Studio</title>
-    <meta name="description" content="Generate comprehensive property valuation reports with Meta AI Muse Spark 1.3 Contributor and web grounding.">
-    <meta name="theme-color" content="#0ea5e9">
+    <meta name="description" content="Generate comprehensive property valuation reports through a secure backend workflow.">
+    <meta name="theme-color" content="#002068">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icons/icon-192.png" sizes="192x192">
     <link rel="apple-touch-icon" href="icons/icon-180.png">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="tailwind.css?v=4.7">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400&family=Newsreader:ital,wght@0,400;0,600;1,400&display=swap">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="tailwind-config.js"></script>
-    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link rel="stylesheet" href="styles.css?v=5.5">
 </head>
-<body class="text-slate-700 antialiased min-h-screen pb-24">
+<body class="auth-loading">
 
-    <!-- Top Navigation -->
-    <nav class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
-        <div class="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-brand-900 flex items-center justify-center text-white shadow-lg">
-                    <i class="fas fa-building text-sm"></i>
+    <section id="authGate" class="auth-gate hidden" aria-hidden="true">
+        <div class="auth-shell">
+            <div class="auth-brand-panel" aria-label="MarketIntel secure workspace">
+                <div class="auth-brand-lockup">
+                    <div class="auth-brand-mark">
+                        <img src="icons/marketintel-mark.png" alt="" aria-hidden="true" class="brand-mark-img">
+                    </div>
+                    <div>
+                        <p class="auth-brand-kicker">MarketIntel</p>
+                        <h1>Market Intelligence Studio</h1>
+                    </div>
                 </div>
-                <div>
-                    <h1 class="font-bold text-slate-900 leading-tight">Market<span class="text-brand-600">Intel</span></h1>
-                    <p class="text-[0.65rem] font-medium text-slate-400 uppercase tracking-widest hidden sm:block">AI Valuation Engine</p>
+                <p class="auth-brand-copy">A private mobile workspace for saved valuations, account preferences, and report generation in the field.</p>
+                <div class="auth-brand-grid" aria-label="Workspace safeguards">
+                    <div>
+                        <i class="fas fa-lock"></i>
+                        <span>Encrypted<br>access</span>
+                    </div>
+                    <div>
+                        <i class="fas fa-clock-rotate-left"></i>
+                        <span>Saved<br>reports</span>
+                    </div>
+                    <div>
+                        <i class="fas fa-shield-halved"></i>
+                        <span>Secure<br>workflow</span>
+                    </div>
                 </div>
             </div>
-            <div class="flex items-center gap-2 sm:gap-3">
-                <a id="apiKeyLink" href="https://dev.meta.ai/" target="_blank" class="text-xs font-medium text-brand-600 bg-brand-50 px-3 py-1.5 rounded-full hover:bg-brand-100 transition-colors">
-                    Get API Key <i class="fas fa-external-link-alt ml-1"></i>
-                </a>
-                <button id="historyToggle" type="button" class="relative w-10 h-10 rounded-full border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-sm transition-colors" aria-label="Open saved valuations" aria-expanded="false">
-                    <i class="fas fa-bars"></i>
-                    <span id="historyCountBadge" class="history-count hidden">0</span>
-                </button>
+
+            <div class="auth-card" role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
+                <div class="auth-card-header">
+                    <p id="authGateEyebrow" class="auth-card-eyebrow">Secure access</p>
+                    <h2 id="authGateTitle">Sign in to continue</h2>
+                    <p id="authGateSubtitle">Use your account to access valuation history and saved preferences.</p>
+                </div>
+
+                <div id="authGateTabs" class="auth-tabs" role="tablist" aria-label="Authentication mode">
+                    <button id="authGateLoginTab" type="button" class="auth-tab is-active" data-auth-mode="login" role="tab" aria-selected="true">Sign in</button>
+                    <button id="authGateSignupTab" type="button" class="auth-tab" data-auth-mode="signup" role="tab" aria-selected="false">Create account</button>
+                </div>
+
+                <form id="authGateForm" class="auth-form" novalidate>
+                    <div id="authGateEmailGroup" class="auth-field">
+                        <label for="authGateEmail">Email</label>
+                        <div class="auth-input-wrap">
+                            <i class="fas fa-envelope"></i>
+                            <input id="authGateEmail" type="email" placeholder="you@example.com" autocomplete="email" inputmode="email">
+                        </div>
+                    </div>
+
+                    <div id="authGatePasswordGroup" class="auth-field">
+                        <label for="authGatePassword">Password</label>
+                        <div class="auth-input-wrap">
+                            <i class="fas fa-lock"></i>
+                            <input id="authGatePassword" type="password" placeholder="Enter your password" autocomplete="current-password" minlength="8">
+                        </div>
+                    </div>
+
+                    <div id="authGateTokenGroup" class="auth-field hidden">
+                        <label for="authGateResetToken">Reset token</label>
+                        <div class="auth-input-wrap">
+                            <i class="fas fa-key"></i>
+                            <input id="authGateResetToken" type="text" placeholder="Paste reset token" autocomplete="one-time-code">
+                        </div>
+                    </div>
+
+                    <div id="authGateNewPasswordGroup" class="auth-field hidden">
+                        <label for="authGateNewPassword">New password</label>
+                        <div class="auth-input-wrap">
+                            <i class="fas fa-lock-open"></i>
+                            <input id="authGateNewPassword" type="password" placeholder="New password" autocomplete="new-password" minlength="8">
+                        </div>
+                    </div>
+
+                    <div id="authGateConfirmGroup" class="auth-field hidden">
+                        <label for="authGateConfirmPassword">Confirm password</label>
+                        <div class="auth-input-wrap">
+                            <i class="fas fa-check"></i>
+                            <input id="authGateConfirmPassword" type="password" placeholder="Confirm password" autocomplete="new-password" minlength="8">
+                        </div>
+                    </div>
+
+                    <div id="authGateMessage" class="auth-message hidden" aria-live="polite"></div>
+
+                    <button id="authGateSubmit" type="submit" class="auth-submit">
+                        <i class="fas fa-right-to-bracket"></i>
+                        <span>Sign in</span>
+                    </button>
+
+                    <div class="auth-links">
+                        <button id="authGateForgotBtn" type="button">Forgot password?</button>
+                        <button id="authGateBackBtn" type="button" class="hidden">Back to sign in</button>
+                    </div>
+
+                    <div id="authGateDevReset" class="auth-dev-reset hidden">
+                        <p>Development reset token ready.</p>
+                        <a id="authGateDevResetLink" href="#">Open reset link</a>
+                    </div>
+                </form>
             </div>
         </div>
-    </nav>
+    </section>
 
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 pt-4">
-        
-        <!-- Introduction (Mobile Friendly) -->
-        <header class="mb-4 animate-fade-in">
-            <h2 class="text-3xl font-serif font-semibold text-slate-900 mb-1">CMA Generator</h2>
-        </header>
-
-        <form id="reportForm" class="space-y-6">
-            
-            <!-- Main Input Card -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up relative">
-                <div class="p-1 bg-gradient-to-r from-brand-500 via-purple-500 to-pink-500 opacity-20 h-1"></div>
-                <div class="p-6 sm:p-8 space-y-6">
-                    <!-- Property Address -->
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Subject Property</label>
-                        <div class="input-group mb-2 has-settings-action">
-                            <i class="fas fa-search input-icon"></i>
-                            <input type="text" id="propertyAddress" class="custom-input" placeholder="e.g. 123 Maple Ave, Springfield, IL">
-                            <button id="settingsToggle" type="button" class="settings-toggle settings-toggle--inline" aria-label="Open settings" aria-expanded="false">
-                                <i class="fas fa-cog"></i>
-                            </button>
-                        </div>
+    <div id="appShell" class="app-shell app-shell--locked" aria-hidden="true">
+        <nav class="app-nav">
+            <div class="app-nav-inner">
+                <button id="historyToggle" type="button" class="nav-icon-btn" aria-label="Open saved valuations" aria-expanded="false">
+                    <i class="fas fa-clock-rotate-left"></i>
+                    <span id="historyCountBadge" class="history-count hidden">0</span>
+                </button>
+                <div class="app-brand">
+                    <div class="app-brand-mark">
+                        <img src="icons/marketintel-mark.png" alt="" aria-hidden="true" class="brand-mark-img">
                     </div>
+                    <div class="app-brand-text">
+                        <h1>MarketIntel</h1>
+                        <p>AI Valuation Engine</p>
+                    </div>
+                </div>
+                <button id="authStatusBtn" type="button" class="nav-icon-btn nav-account-btn" aria-label="Open account and settings" aria-expanded="false">
+                    <i class="fas fa-user"></i>
+                    <span>Sign in</span>
+                </button>
+            </div>
+        </nav>
 
-                    <!-- PDF & Details Grid -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <!-- File Upload -->
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-2">Docs & Photos (Optional)</label>
-                            <div class="relative">
-                                <input type="file" id="propertyPdf" accept="application/pdf,image/*" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                                <div class="custom-file-upload">
-                                    <i class="fas fa-cloud-upload-alt text-2xl text-slate-400 mb-2"></i>
-                                    <p class="text-sm font-medium text-slate-600">Tap to upload files</p>
-                                    <p class="text-xs text-slate-400 mt-1">PDFs, photos, tax records, etc.</p>
+        <main class="app-content">
+            <header class="app-hero">
+                <h2>CMA Generator</h2>
+                <p>Create an AI-powered comparative market analysis in minutes.</p>
+            </header>
+
+            <form id="reportForm" class="valuation-workflow" novalidate>
+                <section class="form-card">
+                    <div class="form-card-accent" aria-hidden="true"></div>
+                    <div class="form-card-body">
+                        <div class="field-stack">
+                            <label class="field-label" for="propertyAddress">
+                                <span>Subject property</span>
+                                <span class="field-hint">Address required</span>
+                            </label>
+                            <div class="input-group has-settings-action">
+                                <i class="fas fa-location-dot input-icon"></i>
+                                <input type="text" id="propertyAddress" class="custom-input" placeholder="Enter property address" autocomplete="street-address">
+                                <button id="settingsToggle" type="button" class="settings-toggle settings-toggle--inline" aria-label="Open settings" aria-expanded="false">
+                                    <i class="fas fa-sliders"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="mobile-field-row">
+                            <div class="field-stack upload-stack">
+                                <label class="field-label" for="propertyPdf">
+                                    <span>Docs &amp; photos</span>
+                                    <span class="field-hint">Optional</span>
+                                </label>
+                                <div class="file-upload-wrap">
+                                    <input type="file" id="propertyPdf" accept="application/pdf,image/*" multiple>
+                                    <div class="custom-file-upload">
+                                        <div class="cf-icon"><i class="fas fa-cloud-arrow-up"></i></div>
+                                        <div>
+                                            <p class="cf-title">Upload files</p>
+                                            <p class="cf-hint">PDF, JPG, PNG</p>
+                                        </div>
+                                    </div>
                                 </div>
+                                <div id="pdfUploadStatus" class="upload-status">
+                                    <span id="pdfUploadPill" class="status-pill">No file</span>
+                                    <span id="pdfUploadName">Upload optional supporting docs.</span>
+                                </div>
+                                <div id="pdfUploadPreviews" class="upload-previews hidden" aria-live="polite"></div>
                             </div>
-                            <div id="pdfUploadStatus" class="upload-status">
-                                <span id="pdfUploadPill" class="status-pill">No file</span>
-                                <span id="pdfUploadName" class="text-slate-500">Upload optional supporting docs.</span>
-                            </div>
-                            <div id="pdfUploadPreviews" class="upload-previews hidden" aria-live="polite"></div>
-                        </div>
 
-                        <!-- Additional Details -->
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-2">Property Details</label>
-                            <textarea id="additionalDetails" rows="4" class="custom-input !pl-4 !py-3 resize-none" placeholder="Beds, baths, sqft, condition, updates..."></textarea>
+                            <div class="field-stack">
+                                <label class="field-label" for="additionalDetails">
+                                    <span>Property details</span>
+                                    <span class="field-hint">Optional</span>
+                                </label>
+                                <textarea id="additionalDetails" rows="5" class="custom-input no-icon" placeholder="Add property details, features, lot size, condition, recent updates..."></textarea>
+                            </div>
                         </div>
                     </div>
+                </section>
 
+                <details class="disclosure">
+                    <summary>
+                        <span class="disclosure-icon"><i class="fas fa-feather-pointed"></i></span>
+                        <span class="disclosure-label">Add special instructions</span>
+                        <span class="disclosure-hint">Optional</span>
+                        <i class="fas fa-chevron-down disclosure-chevron"></i>
+                    </summary>
+                    <div class="disclosure-body">
+                        <textarea id="visibleInstructions" rows="3" class="custom-input no-icon" placeholder="Focus on school district, recent roof repairs, neighborhood comps..."></textarea>
+                    </div>
+                </details>
+
+                <section id="usageSummary" class="usage-summary" aria-live="polite">
+                    <div class="usage-summary-head">
+                        <div>
+                            <p class="usage-eyebrow">Weekly usage</p>
+                            <h3>Reports remaining</h3>
+                        </div>
+                        <button id="usageRefresh" type="button" class="usage-refresh" aria-label="Refresh usage limits">
+                            <i class="fas fa-rotate"></i>
+                        </button>
+                    </div>
+                    <div id="usageLimitGrid" class="usage-limit-grid">
+                        <div class="usage-limit-item is-loading">
+                            <div class="usage-limit-top">
+                                <span><i class="fas fa-bolt"></i> Fast</span>
+                                <strong>Loading</strong>
+                            </div>
+                            <div class="usage-meter" aria-hidden="true"><span style="width:0%"></span></div>
+                            <div class="usage-limit-meta">
+                                <span>Checking usage</span>
+                                <span>Weekly limit</span>
+                            </div>
+                        </div>
+                        <div class="usage-limit-item is-loading">
+                            <div class="usage-limit-top">
+                                <span><i class="fas fa-brain"></i> Smart</span>
+                                <strong>Loading</strong>
+                            </div>
+                            <div class="usage-meter" aria-hidden="true"><span style="width:0%"></span></div>
+                            <div class="usage-limit-meta">
+                                <span>Checking usage</span>
+                                <span>Weekly limit</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p id="usageResetText" class="usage-reset-text">Sign in to view weekly report limits and remaining usage.</p>
+                </section>
+
+                <div class="hidden">
+                    <textarea id="specialInstructions"></textarea>
                 </div>
+
+                <div class="action-bar">
+                    <div class="action-bar-inner">
+                        <button type="button" id="newValuationBtn" class="btn-secondary" aria-label="Start a new valuation">
+                            <i class="fas fa-plus"></i>
+                            <span>New</span>
+                        </button>
+                        <button type="submit" id="generateBtn" class="btn-primary">
+                            <i class="fas fa-bolt"></i>
+                            <span>Generate Analysis</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <div id="progressSection" class="progress-card hidden">
+                <div class="progress-card-head">
+                    <div class="progress-status-icon" aria-hidden="true">
+                        <i class="fas fa-circle-notch fa-spin"></i>
+                    </div>
+                    <div>
+                        <h3 id="progressTitle">Processing</h3>
+                        <p id="progressMessage">The backend is processing the valuation. The final report will appear when complete.</p>
+                    </div>
+                    <span id="progressText">Working</span>
+                </div>
+                <div class="loader-bar" aria-hidden="true"></div>
             </div>
 
-            <!-- Hidden Fields (Required for Logic) -->
-            <div class="hidden">
-                <textarea id="specialInstructions"></textarea>
-            </div>
+            <div id="outputWrapper">
+                <div id="finalReportSection" class="final-report-section hidden">
+                    <div class="final-report-head">
+                        <div>
+                            <h2 class="final-report-title">
+                                <span class="final-report-title-mark"><i class="fas fa-check"></i></span>
+                                Final report
+                            </h2>
+                            <p id="finalReportStatus">Initializing merger...</p>
+                        </div>
+                        <button id="downloadPdfBtn" type="button" disabled class="btn-pdf">
+                            <i class="fas fa-file-pdf"></i>
+                            <span>Download PDF</span>
+                        </button>
+                    </div>
 
-            <!-- Instructions (Collapsed) -->
-            <details class="group bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-slide-up" style="animation-delay: 0.15s;">
-                <summary class="flex items-center justify-between p-4 px-6 cursor-pointer bg-white hover:bg-slate-50 transition-colors">
-                    <span class="text-sm font-semibold text-slate-600">Add Special Instructions?</span>
-                    <i class="fas fa-plus text-xs text-slate-400 transition-transform group-open:rotate-45"></i>
-                </summary>
-                <div class="p-6 pt-0">
-                    <textarea id="visibleInstructions" rows="2" class="custom-input !pl-4 !py-3 resize-none mt-2" placeholder="Focus on school district, recent roof repairs, etc..."></textarea>
-                </div>
-            </details>
+                    <div class="report-paper">
+                        <div class="report-paper-accent" aria-hidden="true"></div>
+                        <div id="finalReportContent" class="prose max-w-none"></div>
+                    </div>
 
-            <!-- Sticky Bottom Action Bar -->
-            <div class="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-lg border-t border-slate-200 z-40">
-                <div class="max-w-4xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-                    <button type="button" id="newValuationBtn" class="w-full sm:w-auto sm:min-w-[160px] border border-slate-200 text-slate-600 font-semibold py-3 px-5 rounded-xl bg-white hover:bg-slate-50 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <i class="fas fa-rotate-right"></i>
-                        <span>New Valuation</span>
-                    </button>
-                    <button type="submit" id="generateBtn" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3.5 px-6 rounded-xl shadow-lg shadow-brand-500/30 transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-lg">
-                        <i class="fas fa-bolt"></i>
-                        <span>Generate Analysis</span>
-                    </button>
+                    <div class="report-disclaimer">
+                        <i class="fas fa-shield-halved"></i>
+                        <p><strong>Disclaimer:</strong> This is an AI-generated estimate based on public data. It is not an official appraisal. Consult a licensed professional for financial decisions.</p>
+                    </div>
                 </div>
             </div>
-        </form>
+        </main>
 
-        <!-- Settings Modal -->
         <div id="settingsModal" class="settings-modal hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
             <div id="settingsOverlay" class="settings-overlay"></div>
             <div class="settings-panel" role="document">
                 <div class="settings-panel-header">
                     <div>
                         <p class="settings-eyebrow">Configuration</p>
-                        <h2 id="settingsTitle">Settings & API</h2>
-                        <p class="settings-subtitle">Manage your API key, model, and report preferences.</p>
+                        <h2 id="settingsTitle">Account &amp; Settings</h2>
+                        <p class="settings-subtitle">Manage account access and report preferences.</p>
                     </div>
                     <button id="settingsClose" type="button" class="settings-close" aria-label="Close settings">
                         <i class="fas fa-xmark"></i>
                     </button>
                 </div>
 
-                <div class="settings-panel-body grid gap-6 md:grid-cols-2">
-                    <!-- API Service -->
-                    <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">API Service</label>
-                        <div class="relative">
-                            <i class="fas fa-server absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
-                            <select id="apiService" disabled class="custom-input appearance-none bg-white">
-                                <option value="meta" selected>Meta AI</option>
+                <div class="settings-panel-body">
+                    <section class="settings-row-full settings-account-card">
+                        <label class="settings-section-label">Account</label>
+                        <p id="authStatusText" class="settings-helptext">Sign in or create an account to save reports across devices.</p>
+                        <div id="authCredentialFields" class="settings-account-grid">
+                            <div class="input-group">
+                                <i class="fas fa-envelope input-icon"></i>
+                                <input type="email" id="authEmail" class="custom-input" placeholder="you@example.com" autocomplete="email" inputmode="email">
+                            </div>
+                            <div class="input-group">
+                                <i class="fas fa-lock input-icon"></i>
+                                <input type="password" id="authPassword" class="custom-input" placeholder="Password" autocomplete="current-password" minlength="8">
+                            </div>
+                        </div>
+                        <div class="settings-account-actions">
+                            <button id="authLoginBtn" type="button" class="history-action">
+                                <i class="fas fa-right-to-bracket"></i>
+                                <span>Sign in</span>
+                            </button>
+                            <button id="authSignupBtn" type="button" class="history-action">
+                                <i class="fas fa-user-plus"></i>
+                                <span>Create account</span>
+                            </button>
+                            <button id="authLogoutBtn" type="button" class="history-action danger hidden">
+                                <i class="fas fa-right-from-bracket"></i>
+                                <span>Sign out</span>
+                            </button>
+                        </div>
+                    </section>
+
+                    <section>
+                        <label class="settings-section-label" for="modelSelect">Analysis mode</label>
+                        <div class="select-wrap">
+                            <i class="fas fa-microchip input-icon"></i>
+                            <select id="modelSelect" class="custom-input">
+                                <option value="fast" selected>Fast · Muse Spark 1.3 Contributor</option>
+                                <option value="smart">Smart · Muse Spark 1.3 Contributor</option>
                             </select>
-                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                            <i class="fas fa-chevron-down select-chevron"></i>
                         </div>
-                        <p class="text-xs text-slate-500 mt-2">All analyses use Meta AI.</p>
-                    </div>
+                        <p id="selectedUsageHint" class="settings-helptext usage-selected-hint">Usage limits load after sign-in.</p>
+                    </section>
 
-                    <!-- API Key -->
-                    <div class="md:col-span-2">
-                        <label id="apiKeyLabel" class="block text-sm font-semibold text-slate-700 mb-2">API Key</label>
-                        <div class="input-group !mb-1">
-                            <i class="fas fa-key input-icon"></i>
-                            <input type="password" id="apiKey" class="custom-input" placeholder="Enter your API Key">
-                        </div>
-                        <div class="flex items-center gap-2 mt-2">
-                            <input type="checkbox" id="rememberApiKey" class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
-                            <label for="rememberApiKey" class="text-sm text-slate-500">Remember on this device</label>
-                        </div>
-                    </div>
-
-                    <!-- Report Model Selection -->
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Reports Model</label>
-                        <div class="relative">
-                            <i class="fas fa-microchip absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
-                            <select id="reportModelSelect" disabled class="custom-input appearance-none bg-white">
-                                <option value="muse-spark-1.3-contributor" selected>Muse Spark 1.3 Contributor</option>
-                            </select>
-                            <i id="reportModelChevron" class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
-                        </div>
-                        <p id="reportModelHelpText" class="text-xs text-slate-500 mt-2">Muse Spark 1.3 Contributor is used for every report, validation, and final merge.</p>
-                    </div>
-
-                    <!-- Report Audience -->
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Target Audience</label>
-                        <div class="relative">
-                            <i class="fas fa-users absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
-                            <select id="reportAudience" class="custom-input appearance-none bg-white">
+                    <section>
+                        <label class="settings-section-label" for="reportAudience">Target audience</label>
+                        <div class="select-wrap">
+                            <i class="fas fa-users input-icon"></i>
+                            <select id="reportAudience" class="custom-input">
                                 <option value="buyer">Buyer (Negotiation)</option>
                                 <option value="seller" selected>Seller (Pricing)</option>
                                 <option value="investor">Investor (ROI)</option>
                             </select>
-                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                            <i class="fas fa-chevron-down select-chevron"></i>
                         </div>
-                    </div>
-
-                    <!-- Prompt Style -->
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Analysis Style</label>
-                        <div class="relative">
-                            <i class="fas fa-scroll absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
-                            <select id="promptSelect" class="custom-input appearance-none bg-white">
-                                <option value="lite">Lite (Lower Cost)</option>
-                                <option value="standard">Standard Valuation</option>
-                                <option value="experimental" selected>Bank-Grade CMA (Strict)</option>
-                            </select>
-                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
-                        </div>
-                    </div>
-
-                    <!-- Reports Count -->
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Sample Size</label>
-                        <div class="relative">
-                            <i class="fas fa-layer-group absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
-                            <select id="reportCount" class="custom-input appearance-none bg-white">
-                                <option value="1">1 Report</option>
-                                <option value="3" selected>3 Reports (Best Balance)</option>
-                                <option value="5">5 Reports (Higher Cost)</option>
-                                <option value="10">10 Reports (Deep Dive)</option>
-                                <option value="100">MAX Mode (100 Reports, $$$)</option>
-                            </select>
-                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
-                        </div>
-                    </div>
-
-                    <!-- Cost Controls -->
-                    <div class="md:col-span-2">
-                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
-                            <div class="flex items-start gap-3">
-                                <input type="checkbox" id="budgetMode" class="mt-1 rounded border-slate-300 text-brand-600 focus:ring-brand-500">
-                                <div>
-                                    <label for="budgetMode" class="text-sm font-semibold text-slate-700">Budget mode</label>
-                                    <p class="text-xs text-slate-500 mt-1">Forces 1 report, uses the Lite prompt, skips validation and extra extraction calls, and caps output length.</p>
-                                </div>
-                            </div>
-                            <div class="flex items-start gap-3">
-                                <input type="checkbox" id="enableSearch" class="mt-1 rounded border-slate-300 text-brand-600 focus:ring-brand-500" checked>
-                                <div>
-                                    <label for="enableSearch" class="text-sm font-semibold text-slate-700">Web search grounding</label>
-                                    <p class="text-xs text-slate-500 mt-1">Turn off to reduce cost (analysis will rely only on provided details and general knowledge).</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    </section>
                 </div>
             </div>
         </div>
 
-        <!-- Progress Dashboard -->
-        <div id="progressSection" class="hidden mt-8 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden animate-slide-up">
-            <div class="p-6 bg-slate-900 text-white">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 id="progressTitle" class="hidden text-lg font-semibold flex items-center gap-2">
-                        <i class="fas fa-circle-notch fa-spin text-brand-500"></i>
-                        Running Analysis...
-                    </h3>
-                    <span id="progressText" class="hidden text-sm font-mono text-slate-400 bg-slate-800 px-3 py-1 rounded-full">0/0</span>
-                </div>
-                <!-- Progress Bar -->
-                <div class="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                    <div id="progressBar" class="h-full bg-brand-500 transition-all duration-500 ease-out" style="width: 0%"></div>
-                </div>
-            </div>
-            
-            <!-- Live Logs -->
-            <div id="reportStatusList" class="hidden p-4 max-h-60 overflow-y-auto bg-slate-50 border-t border-slate-100 space-y-2">
-                <!-- Status items injected here -->
-            </div>
-        </div>
-
-        <!-- Output Container -->
-        <div id="outputWrapper" class="space-y-8 mt-8 pb-10">
-            
-            <!-- Final Merged Report -->
-            <div id="finalReportSection" class="hidden">
-                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-                    <h2 class="text-2xl font-serif font-bold text-slate-900 flex items-center gap-3">
-                        <span class="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-sm"><i class="fas fa-check"></i></span>
-                        Final Consensus
-                    </h2>
-                    <button id="downloadPdfBtn" disabled class="w-full sm:w-auto px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
-                        <i class="fas fa-file-pdf text-red-500"></i> Download PDF
+        <div id="historyDrawer" class="history-drawer hidden" aria-hidden="true">
+            <div id="historyOverlay" class="history-overlay" tabindex="-1"></div>
+            <aside class="history-panel" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+                <div class="history-panel-header">
+                    <div>
+                        <p class="history-eyebrow">Archive</p>
+                        <h2 id="historyTitle">Saved Valuations</h2>
+                    </div>
+                    <button id="historyClose" type="button" class="history-close" aria-label="Close saved valuations">
+                        <i class="fas fa-times"></i>
                     </button>
                 </div>
-
-                <p id="finalReportStatus" class="text-sm text-slate-500 italic mb-4">Initializing merger...</p>
-
-                <!-- Paper Sheet Effect -->
-                <div class="bg-white rounded-xl shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
-                    <div class="h-2 bg-gradient-to-r from-brand-500 to-emerald-500"></div>
-                    <div id="finalReportContent" class="prose max-w-none p-8 sm:p-12"></div>
+                <div class="history-panel-actions">
+                    <button id="historyRefresh" type="button" class="history-action">
+                        <i class="fas fa-rotate"></i>
+                        <span>Refresh</span>
+                    </button>
+                    <button id="historyClear" type="button" class="history-action danger">
+                        <i class="fas fa-trash"></i>
+                        <span>Clear all</span>
+                    </button>
                 </div>
-                
-                <div class="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-start gap-3">
-                    <i class="fas fa-exclamation-triangle mt-1"></i>
-                    <p class="m-0"><strong>Disclaimer:</strong> This is an AI-generated estimate based on public data. It is not an official appraisal. Consult a licensed professional for financial decisions.</p>
-                </div>
-            </div>
-
-            <!-- Individual Reports Accordion List -->
-            <div id="reportsContainer" class="hidden space-y-4"></div>
+                <div id="historyList" class="history-list" aria-live="polite"></div>
+                <div id="historyEmpty" class="history-empty hidden">No saved valuations yet.</div>
+            </aside>
         </div>
-
     </div>
 
-    <!-- Saved Valuations Drawer -->
-    <div id="historyDrawer" class="history-drawer hidden" aria-hidden="true">
-        <div id="historyOverlay" class="history-overlay" tabindex="-1"></div>
-        <aside class="history-panel" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
-            <div class="history-panel-header">
-                <div>
-                    <p class="history-eyebrow">Archive</p>
-                    <h2 id="historyTitle">Saved Valuations</h2>
-                </div>
-                <button id="historyClose" type="button" class="history-close" aria-label="Close saved valuations">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="history-panel-actions">
-                <button id="historyRefresh" type="button" class="history-action">
-                    <i class="fas fa-rotate"></i> Refresh
-                </button>
-                <button id="historyClear" type="button" class="history-action danger">
-                    <i class="fas fa-trash"></i> Clear All
-                </button>
-            </div>
-            <div id="historyList" class="history-list" aria-live="polite"></div>
-            <div id="historyEmpty" class="history-empty hidden">No saved valuations yet.</div>
-        </aside>
-    </div>
-
-    <!-- Shared provider client, followed by application logic. -->
-    <script src="meta-api.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=5.6"></script>
 </body>
 </html>

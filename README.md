@@ -1,13 +1,13 @@
 # Market Intelligence Studio
 
-**MarketIntel** is an AI-powered web application that generates comprehensive real estate property valuation reports using Meta AI Muse Spark 1.3 Contributor. Whether you're a buyer, seller, or investor, this tool helps you understand property values through data-driven analysis, comparable sales research, and market intelligence.
+**MarketIntel** is an AI-powered web application that generates comprehensive real estate property valuation reports through a secure Vercel backend workflow. Whether you're a buyer, seller, or investor, this tool helps you understand property values through data-driven analysis, comparable sales research, and market intelligence.
 
 ## Features
 
 ### 🏠 Comprehensive Property Analysis
 - **Property Valuation Reports**: Generate detailed Comparative Market Analysis (CMA) reports with estimated market value ranges
-- **Web-Grounded Research**: Automatically searches for comparable sales, active listings, and market trends using Meta AI's web search integration, with source citations
-- **Multiple Report Generation**: Create 1, 3, 5, 10, or MAX (100) reports and merge them into a consensus analysis
+- **Web-Grounded Research**: Automatically searches for comparable sales, active listings, and market trends using Meta AI's web search integration
+- **Final Report Generation**: Automatically process multiple analyses behind the scenes and present one final valuation report
 - **Document Support**: Upload PDFs, photos, tax records, and other property documents for enhanced analysis
 
 ### 🎯 Audience-Specific Reports
@@ -16,27 +16,28 @@ Tailor your reports for different audiences:
 - **Seller Reports**: Emphasize pricing strategy, positioning, and preparation priorities
 - **Investor Reports**: Highlight cash flow potential, rent comps, cap rates, and ROI drivers
 
-### 📊 Report Styles
-Choose between two analysis approaches:
-- **Standard Valuation**: Comprehensive market analysis with detailed comps and market trends
-- **Bank-Grade CMA**: Strict, conservative analysis with rigorous data validation and adjustment grids
-
 ### 💾 Smart Storage & History
-- **Saved Valuations**: Automatically save all reports to your browser's local storage
+- **Saved Valuations**: Automatically save all reports to the authenticated user's backend account
+- **Account Settings**: Persist AI model and audience preferences to the authenticated user's account
 - **Report History**: Access and review past valuations with a convenient history drawer
 - **PDF Export**: Download professional PDF reports with formatted tables and summaries
 
 ### ⚡ Advanced Capabilities
-- **Background Processing**: Reports continue generating even if you close the browser tab (PWA support)
+- **Background Processing**: Reports run asynchronously in Vercel API functions and remain available when you leave the page
 - **Offline Support**: Progressive Web App with service worker for offline functionality
 - **Real-time Progress**: Track report generation with live status updates
-- **Notification Alerts**: Get notified when your reports are ready
+- **Cross-Device Access**: Return from any logged-in session and view completed or failed reports
 
 ## Getting Started
 
 ### Prerequisites
 - A modern web browser (Chrome, Firefox, Safari, Edge)
-- A Meta Model API key with access to `muse-spark-1.3-contributor` ([Get one here](https://dev.meta.ai/))
+- A Meta AI API key configured as a server environment variable
+- Vercel Postgres / Neon connection environment variables
+- An `AUTH_SESSION_SECRET` for the built-in signed-cookie auth flow
+- A Resend API key and verified sender address for production password recovery emails
+- Users create email/password accounts that are stored in Postgres
+- Optional password reset configuration: `APP_BASE_URL`, `PASSWORD_RESET_DEV_MODE`, `PASSWORD_RESET_TOKEN_TTL_MINUTES`, and `PASSWORD_RESET_EMAIL_REPLY_TO`
 
 ### Installation
 
@@ -46,37 +47,37 @@ Choose between two analysis approaches:
    cd valuate
    ```
 
-2. **Serve the application**
-   
-   Since this is a client-side application, you can serve it using any static file server:
-   
-   **Option 1: Using Python**
+2. **Install dependencies**
    ```bash
-   # Python 3
-   python -m http.server 8000
-   
-   # Python 2
-   python -m SimpleHTTPServer 8000
+   npm install
    ```
-   
-   **Option 2: Using Node.js (http-server)**
-   ```bash
-   npx http-server -p 8000
-   ```
-   
-   **Option 3: Using VS Code Live Server**
-   - Install the "Live Server" extension
-   - Right-click on `index.html` and select "Open with Live Server"
 
-3. **Open in your browser**
-   Navigate to `http://localhost:8000` (or the port you specified)
+3. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   ```
+   Fill in `META_API_KEY`, `AUTH_SESSION_SECRET`, `CRON_SECRET`, and your Vercel Postgres / Neon connection values.
+
+4. **Run with Vercel-compatible API routes**
+   ```bash
+   npx vercel dev
+   ```
+
+5. **Rebuild Tailwind CSS after changing utility classes**
+   ```bash
+   npm run build:css
+   ```
+
+6. **Open in your browser**
+   Navigate to the local URL printed by Vercel, usually `http://localhost:3000`.
 
 ### First-Time Setup
 
-1. Click the settings icon (⚙️) in the top navigation
-2. Enter your Meta AI API key
-3. Optionally check "Remember on this device" to save your API key locally
-4. Configure other settings as needed. The provider and model are fixed to Meta AI / Muse Spark 1.3 Contributor.
+1. Open the app and use the first-use login screen
+2. Enter your email and password, then choose **Create account**
+3. Select your preferred AI model and report settings
+4. Return later with **Sign in** using the same email and password
+5. Use **Forgot password?** to request a one-time reset token during local development
 
 ## How to Use
 
@@ -89,42 +90,84 @@ Choose between two analysis approaches:
 
 2. **Configure Settings** (optional)
    - Choose your target audience (Buyer/Seller/Investor)
-   - Select report style (Standard or Bank-Grade CMA)
-   - Set the number of reports to generate (3 is recommended for best balance; MAX mode runs 100 reports with up to three requests at a time)
+   - Select the AI model for report generation
 
 3. **Generate Analysis**
    - Click "Generate Analysis"
-   - Watch the progress as reports are created
-   - Reports will merge automatically into a final consensus report
+   - The frontend submits the request to `/api/reports` and receives a report ID
+   - Watch the simple queued/processing status while the backend works
+   - The processing view stays simple while the backend works
+   - The final report displays automatically when it is ready
 
 4. **Review Results**
-   - View the final merged report with consensus valuation
-   - Expand individual reports to see detailed analyses
+   - View the final report and valuation guidance
    - Download as PDF for sharing or record-keeping
 
 ### Advanced Features
 
 **Special Instructions**: Click "Add Special Instructions?" to provide specific focus areas (e.g., "Focus on school district quality" or "Emphasize recent renovations")
 
-**Saved Valuations**: Access your report history by clicking the menu icon (☰) in the top navigation. View, manage, or delete saved reports.
+**Saved Valuations**: Access your report history by clicking the menu icon (☰) in the top navigation. View, retry, manage, or delete saved backend reports.
 
-**Background Processing**: When supported by your browser, reports will continue generating even if you close the tab. You'll receive a notification when they're ready.
+**Background Processing**: Reports are persisted in Postgres with `queued`, `processing`, `completed`, or `failed` status. You can leave the page and return later from any signed-in session.
 
 ## Technical Details
 
 ### Architecture
 - **Frontend**: Vanilla JavaScript with Tailwind CSS
-- **AI Integration**: Meta Model API (`https://api.meta.ai/v1/responses`), using one shared client in the page and service worker
-- **Storage**: IndexedDB for reports, localStorage for preferences
-- **Service Worker**: Background processing and offline support
+- **Backend**: Vercel API Functions under `api/`
+- **Async Processing**: `POST /api/reports` creates a queued job, returns a report ID, and starts backend processing with `waitUntil`; `/api/worker` can process queued/stale jobs on a cron schedule
+- **AI Integration**: Meta Responses API, called only from backend functions using `muse-spark-1.3-contributor`
+- **Storage**: Postgres tables `app_users`, `report_jobs`, `report_usage_counters`, and `report_usage_events`, with reports scoped by authenticated `user_id`
+- **Service Worker**: Static/offline asset caching only
 - **PWA**: Installable Progressive Web App with manifest
 
+### API Routes
+- `POST /api/auth/signup` - create an email/password account and signed HttpOnly session cookie
+- `POST /api/auth/login` - verify an email/password account and create a signed HttpOnly session cookie
+- `POST /api/auth/password-reset/request` - create a one-time password reset token and return a development reset link when enabled
+- `POST /api/auth/password-reset/confirm` - reset the password with a valid token and sign in the user
+- `POST /api/auth/logout` - clear the session
+- `GET /api/auth/me` - inspect current auth state
+- `GET|PATCH /api/user/settings` - read or update the signed-in user's report preferences
+- `POST /api/reports` - create a report job, subject to weekly Fast/Smart usage limits
+- `GET /api/reports` - list the signed-in user's reports
+- `GET /api/reports/usage` - read the signed-in user's Fast/Smart weekly limits, used counts, remaining counts, and reset time
+- `GET /api/reports/:id` - read one owned report
+- `DELETE /api/reports/:id` - delete one owned report
+- `POST /api/reports/:id/retry` - retry a failed or queued report when appropriate
+- `GET|POST /api/worker` - process queued jobs, protected by `CRON_SECRET` for cron usage
+
+### Required Environment Variables
+- `META_API_KEY`: server-side Meta AI key
+- `AUTH_SESSION_SECRET`: long random string used to sign sessions
+- `CRON_SECRET`: bearer token for the scheduled worker endpoint
+- `REPORT_MODEL`: optional default report model choice
+- `FAST_REPORT_WEEKLY_LIMIT`: optional weekly Fast report limit per user, default `5`
+- `SMART_REPORT_WEEKLY_LIMIT`: optional weekly Smart report limit per user, default `5`
+- `REPORT_USAGE_TIME_ZONE`: optional IANA time zone for weekly quota windows, default `America/Detroit`
+- `MAX_JSON_BODY_CHARS`: optional maximum JSON request body size, default `5500000`
+- `APP_BASE_URL`: optional absolute app URL used to build password reset links
+- `PASSWORD_RESET_DEV_MODE`: optional local-development switch that returns reset tokens in the API response
+- `PASSWORD_RESET_TOKEN_TTL_MINUTES`: optional reset-token expiration window, default `30`
+- `RESEND_API_KEY`: server-side Resend API key used to send password reset emails
+- `PASSWORD_RESET_EMAIL_FROM`: verified sender, for example `MarketIntel <password-reset@yourdomain.com>`
+- `PASSWORD_RESET_EMAIL_REPLY_TO`: optional reply-to address for reset emails
+- Vercel Postgres / Neon variables such as `POSTGRES_URL` or the integration-provided equivalents
+
+Password reset tokens are stored hashed in Postgres and are single-use. In production, set `RESEND_API_KEY`, `PASSWORD_RESET_EMAIL_FROM`, and `APP_BASE_URL`, and keep `PASSWORD_RESET_DEV_MODE` unset so raw reset tokens are not returned to the browser.
+
+Note: attachments are submitted directly to the report creation API and are limited to small PDFs/images. For large documents, add Vercel Blob or another object store and persist file URLs in the report inputs.
+
 ### Supported Models
-- `muse-spark-1.3-contributor` for draft reports, comparable validation, final merging, value extraction, and address extraction.
-- Saved provider/model preferences are migrated to Meta. Existing report history remains readable; queued jobs from previous providers require a new valuation with a Meta key.
-- Search is enabled only for research stages when selected. A search API error is surfaced; the client does not silently remove search.
-- PDF and image attachments are sent inline. Model-generated JavaScript is not executed in the browser.
-- Requests use `store: false`; this does not change Contributor tier data-use terms. See [Meta models](https://dev.meta.ai/docs/models) and [pricing and terms](https://dev.meta.ai/docs/pricing-rate-limits).
+- Fast: Muse Spark 1.3 Contributor, medium reasoning; 5 reports per user per week by default.
+- Smart: Muse Spark 1.3 Contributor, high reasoning; 5 reports per user per week by default.
+
+Both modes use `muse-spark-1.3-contributor` for every draft, comparable validation, merge, compliance review/revision, and extraction. The existing modes and quota tiers are retained, with at most three concurrent drafts. Saved Gemini selections migrate to the corresponding mode. Provider keys remain server-side and are never embedded in browser assets.
+
+See [Meta Responses API](https://dev.meta.ai/docs/protocols/responses) and [Contributor pricing and data-use terms](https://dev.meta.ai/docs/pricing-rate-limits). Requests use `store: false`, which does not change Contributor data-use terms.
+
+Usage limits are enforced server-side with an atomic Postgres quota counter and durable usage ledger. Deleting report history does not reset quota, retrying a report consumes quota, and direct API calls are restricted to the supported Fast/Smart model choices.
 
 ### Browser Compatibility
 - Chrome/Edge (recommended)
@@ -134,21 +177,20 @@ Choose between two analysis approaches:
 
 Note: Background processing and notifications require modern browser support for Service Workers and Background Sync API.
 
-## Verification
-
-Run `node --test tests/*.test.cjs` for the shared provider, frontend settings, and background workflow checks. Run `node --check app.js`, `node --check meta-api.js`, and `node --check service-worker.js` for syntax checks.
-
 ## Project Structure
 
 ```
 valuate/
+├── api/                # Vercel API functions, auth, DB, report worker
 ├── index.html          # Main application HTML
-├── app.js              # Core application logic
-├── meta-api.js         # Shared Meta Responses API client
-├── tests/              # Provider and workflow regression checks
-├── service-worker.js   # Background processing & offline support
+├── app.js              # Frontend UI, auth state, polling, history rendering
+├── service-worker.js   # Static/offline caching
+├── package.json        # Dependencies, checks, and Tailwind CSS build
+├── vercel.json         # Vercel function, cron, and API cache config
+├── tailwind.css        # Generated Tailwind CSS bundle
+├── tailwind.config.cjs # Tailwind CLI configuration
+├── src/tailwind.css    # Tailwind CSS input
 ├── styles.css          # Custom styles
-├── tailwind-config.js  # Tailwind CSS configuration
 ├── manifest.json       # PWA manifest
 ├── offline.html        # Offline fallback page
 ├── icons/              # App icons for PWA
@@ -157,15 +199,15 @@ valuate/
 
 ## API Usage & Costs
 
-This application uses third-party AI APIs with usage-based pricing. Key points:
+This application uses Meta AI APIs from backend functions only. Key points:
 
-- **API Key Required**: You must provide your own Meta AI API key
-- **Web Search**: Provider search/grounding features may add cost
+- **Server Key Required**: Configure `META_API_KEY` in the deployment environment
+- **No Browser Secrets**: The frontend never receives or stores Meta keys
+- **Web Search**: Fast and Smart use Meta web search grounding.
 - **Token Usage**: Reports can be lengthy; monitor your API usage
-- **Rate Limits**: Subject to your provider's API rate limits
-- **Browser-only local testing**: Keys are entered client-side in this static app, which is convenient for local testing but not ideal for production secret handling
+- **Rate Limits**: Subject to Meta API rate limits
 
-For current pricing, Contributor data-use terms, and limits, visit [Meta Model API](https://dev.meta.ai/docs/pricing-rate-limits). Never put a real key in source files or commit one. Keys entered for background jobs are stored with those jobs in local IndexedDB; the optional Remember setting also uses localStorage.
+For current pricing and limits, visit [Meta Model API](https://dev.meta.ai/docs/pricing-rate-limits).
 
 ## Limitations & Disclaimers
 
@@ -191,4 +233,4 @@ For issues, questions, or feature requests, please open an issue on the reposito
 
 ---
 
-**Built with Meta AI**
+**Built with Meta AI APIs**
