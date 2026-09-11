@@ -67,7 +67,7 @@ export const MetaAI = (() => {
             input: buildInput(prompt, attachments),
             store: false,
             max_output_tokens: Math.min(131072, Math.max(8192, Number(options.maxOutputTokens) || (costMode ? 8192 : (experimental ? 65536 : 32768)))),
-            reasoning: { effort: options.reasoningEffort || (costMode ? 'low' : (experimental ? 'high' : 'medium')) }
+            reasoning: { effort: options.reasoningEffort || 'medium' }
         };
         if (enableSearch) body.tools = [{ type: 'web_search' }];
         for (let attempt = 0; attempt < 4; attempt++) {

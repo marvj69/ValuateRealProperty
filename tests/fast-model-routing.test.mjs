@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { sanitizeReportInput, getDraftModelPlan } from '../server/lib/reports.js';
 import { FAST_REPORT_MODEL, SMART_REPORT_MODEL, META_REPORT_MODEL } from '../server/lib/report-models.js';
+import { callMetaWithCache } from '../server/lib/report-artifacts.js';
 import {
   generateMergedReport,
   resolveComplianceRevisionModel
@@ -19,6 +20,7 @@ const input = sanitizeReportInput({
 assert.equal(input.modelTier, 'fast');
 assert.equal(input.model, FAST_REPORT_MODEL);
 assert.equal(input.supportModel, META_REPORT_MODEL);
+assert.equal(input.reasoningEffort, 'max');
 assert.deepEqual(getDraftModelPlan(input, input.reportCount), [
   META_REPORT_MODEL,
   META_REPORT_MODEL,
@@ -36,7 +38,7 @@ globalThis.fetch = async (url, options = {}) => {
   const model = requestBody.model;
   assert.equal(url, 'https://api.meta.ai/v1/responses');
   assert.equal(options.headers.Authorization, 'Bearer test-key');
-  calls.push({ model, prompt });
+  calls.push({ model, prompt, reasoningEffort: requestBody.reasoning?.effort });
 
   let text = '';
   if (prompt.startsWith('You are a data verification specialist')) {
@@ -107,6 +109,8 @@ globalThis.fetch = async (url, options = {}) => {
     text = JSON.stringify({ rangeLow: 275000, rangeHigh: 325000 });
   } else if (prompt.startsWith('You are an address extraction assistant')) {
     text = '123 Fast Lane, Marquette, MI';
+  } else if (prompt === 'Generate test draft' || prompt === 'Auxiliary test call') {
+    text = 'Synthetic test output';
   } else {
     throw new Error(`Unexpected Meta AI prompt: ${prompt.slice(0, 80)}`);
   }
@@ -145,6 +149,9 @@ assert.equal(finalReport.valueRange.rangeLow, 275000);
 assert.equal(finalReport.inferredAddress, '123 Fast Lane, Marquette, MI');
 assert.equal(calls.length, 7);
 assert.deepEqual([...new Set(calls.map((call) => call.model))], [META_REPORT_MODEL]);
+assert.deepEqual(calls.map((call) => call.reasoningEffort), [
+  'medium', 'max', 'medium', 'medium', 'medium', 'medium', 'medium'
+]);
 
 const smartInput = sanitizeReportInput({
   propertyAddress: '123 Smart Lane, Marquette, MI',
@@ -156,6 +163,7 @@ const smartInput = sanitizeReportInput({
 assert.equal(smartInput.modelTier, 'smart');
 assert.equal(smartInput.model, SMART_REPORT_MODEL);
 assert.equal(smartInput.supportModel, META_REPORT_MODEL);
+assert.equal(smartInput.reasoningEffort, 'max');
 
 calls.length = 0;
 complianceReviews = 0;
@@ -171,7 +179,8 @@ const smartFinalReport = await generateMergedReport({
   ],
   reportAudience: 'seller',
   model: smartInput.supportModel,
-  reasoningEffort: smartInput.reasoningEffort,
+  // A saved or direct caller's old effort must not override stage routing.
+  reasoningEffort: 'high',
   enableSearch: smartInput.enableSearch
 });
 
@@ -184,23 +193,39 @@ assert.equal(smartValidationCalls[0].model, META_REPORT_MODEL);
 assert.equal(smartMergeCalls.length, 1);
 assert.equal(smartMergeCalls[0].model, META_REPORT_MODEL);
 assert.equal(smartFinalReport.complianceReview.model, META_REPORT_MODEL);
+assert.deepEqual(calls.map((call) => call.reasoningEffort), [
+  'medium', 'max', 'medium', 'medium', 'medium', 'medium', 'medium'
+]);
 
-console.log(`Fast and Smart model routing verified across Meta AI workflow calls.`);
+// Exercise the same request boundary used by every draft, including stale
+// queued settings. Assert the actual Meta request body, not just presets.
+calls.length = 0;
+for (const model of getDraftModelPlan(input, input.reportCount)) {
+  await callMetaWithCache({stage:'draft', model, prompt:'Generate test draft', reasoningEffort:'low'});
+}
+assert.equal(calls.length, input.reportCount);
+assert.ok(calls.every((call) => call.model === META_REPORT_MODEL && call.reasoningEffort === 'max'));
+for (const stage of [undefined, 'future_support_stage']) {
+  await callMetaWithCache({stage, prompt:'Auxiliary test call', reasoningEffort:'max'});
+  assert.equal(calls.at(-1).reasoningEffort, 'medium');
+}
+
+console.log('Both modes verified: drafts and merge use max; validation, compliance, and extraction use medium.');
 
 // Existing saved selections retain their quota tier and migrate to Meta.
-for (const [legacy, expectedTier, expectedEffort] of [
-  ['gemini-flash-lite-latest','fast','medium'],
-  ['gemini-3.1-flash-lite','fast','medium'],
-  ['gemini-3-flash-preview','smart','high'],
-  ['gemini-3.5-flash','smart','high'],
-  ['gemini-flash-latest','smart','high'],
-  [META_REPORT_MODEL,'fast','medium']
+for (const [legacy, expectedTier] of [
+  ['gemini-flash-lite-latest','fast'],
+  ['gemini-3.1-flash-lite','fast'],
+  ['gemini-3-flash-preview','smart'],
+  ['gemini-3.5-flash','smart'],
+  ['gemini-flash-latest','smart'],
+  [META_REPORT_MODEL,'fast']
 ]) {
   const migrated=sanitizeReportInput({propertyAddress:'Synthetic test',model:legacy,reportCount:2});
   assert.equal(migrated.modelTier,expectedTier);
   assert.equal(migrated.modelProvider,'meta');
   assert.equal(migrated.supportModel,META_REPORT_MODEL);
-  assert.equal(migrated.reasoningEffort,expectedEffort);
+  assert.equal(migrated.reasoningEffort,'max');
   assert.deepEqual(getDraftModelPlan({...migrated,draftModels:['old-provider/model']},2),[META_REPORT_MODEL,META_REPORT_MODEL]);
 }
 assert.throws(()=>sanitizeReportInput({propertyAddress:'Synthetic test',model:'unlisted-model'}),/Unsupported AI model/);

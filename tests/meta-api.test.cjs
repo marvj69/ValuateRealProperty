@@ -34,7 +34,7 @@ test('text, PDF, image, search, and model use the Meta Responses protocol', asyn
     assert.equal(request.headers.Authorization, 'Bearer test-meta-key');
     assert.equal(request.payload.model, MODEL);
     assert.equal(request.payload.store, false);
-    assert.equal(request.payload.reasoning.effort, 'high');
+    assert.equal(request.payload.reasoning.effort, 'medium');
     assert.deepEqual(request.payload.tools, [{type:'web_search'}]);
     assert.equal(request.payload.input[0].content[1].file_data, 'data:application/pdf;base64,cGRm');
     assert.equal(request.payload.input[0].content[2].image_url, 'data:image/png;base64,aW1hZ2U=');
@@ -47,7 +47,7 @@ test('budget and extraction calls omit search and sampling parameters', async ()
     await h.client.generate('key', 'Extract', false, [], {costMode:true});
     const body = h.calls[0].payload;
     assert.equal(body.max_output_tokens, 8192);
-    assert.equal(body.reasoning.effort, 'low');
+    assert.equal(body.reasoning.effort, 'medium');
     for (const key of ['tools','temperature','top_p','plugins']) assert.equal(key in body, false);
 });
 
@@ -75,9 +75,10 @@ test('rate limits honor Retry-After without changing model or search', async () 
     const h = harness((request, count) => count === 1
         ? new Response(JSON.stringify({error:{message:'Rate limit'}}), {status:429,headers:{'Retry-After':'2'}})
         : success());
-    await h.client.generate('key','Test',true);
+    await h.client.generate('key','Test',true,[],{reasoningEffort:'max'});
     assert.deepEqual(h.delays,[2000]);
     assert.equal(h.calls.length,2);
+    assert.equal(h.calls[0].payload.reasoning.effort,'max');
     assert.deepEqual(h.calls[0].payload,h.calls[1].payload);
 });
 

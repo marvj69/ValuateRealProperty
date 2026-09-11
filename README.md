@@ -160,8 +160,10 @@ Password reset tokens are stored hashed in Postgres and are single-use. In produ
 Note: attachments are submitted directly to the report creation API and are limited to small PDFs/images. For large documents, add Vercel Blob or another object store and persist file URLs in the report inputs.
 
 ### Supported Models
-- Fast: Muse Spark 1.3 Contributor, medium reasoning; 5 reports per user per week by default.
-- Smart: Muse Spark 1.3 Contributor, high reasoning; 5 reports per user per week by default.
+- Fast: Muse Spark 1.3 Contributor; 5 reports per user per week by default.
+- Smart: Muse Spark 1.3 Contributor; 5 reports per user per week by default.
+
+Both modes use `max` reasoning for every report draft and final merge. All supporting calls use `medium`, including comparable validation, compliance review and revision, and value/address extraction. The server applies this policy by stage before cache lookup, so saved mode settings cannot override it or reuse a cached response from a different reasoning effort.
 
 Both modes use `muse-spark-1.3-contributor` for every draft, comparable validation, merge, compliance review/revision, and extraction. The existing modes and quota tiers are retained, with at most three concurrent drafts. Saved Gemini selections migrate to the corresponding mode. Provider keys remain server-side and are never embedded in browser assets.
 

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { ensureSchema, sql } from './db.js';
 import { callMeta, normalizeModelName } from './meta.js';
+import { getReportStageReasoningEffort } from './report-models.js';
 
 const CACHE_STATUS_HIT = 'hit';
 const CACHE_STATUS_MISS = 'miss';
@@ -246,6 +247,9 @@ export async function callMetaWithCache({
   validateResult = null,
   ...options
 }) {
+  // Apply the stage policy before cache hashing and both request paths, even
+  // when a saved job or caller still supplies the previous mode's effort.
+  options.reasoningEffort = getReportStageReasoningEffort(stage);
   if (!artifactContext?.userId || !artifactContext?.reportId || !artifactContext?.inputFingerprint || !stage) {
     return callMeta(options);
   }
