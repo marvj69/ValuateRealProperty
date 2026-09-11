@@ -36,6 +36,15 @@
             box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
         }
 
+        .custom-input.is-multi-model {
+            min-height: 11rem;
+            padding: 0.6rem 0.9rem;
+        }
+
+        .custom-input.is-multi-model option {
+            padding: 0.25rem 0.35rem;
+        }
+
         .input-icon {
             position: absolute;
             left: 1rem;

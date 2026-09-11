@@ -1,13 +1,13 @@
 # Market Intelligence Studio
 
-**MarketIntel** is an AI-powered web application that generates comprehensive real estate property valuation reports using Google's Gemini AI models. Whether you're a buyer, seller, or investor, this tool helps you understand property values through data-driven analysis, comparable sales research, and market intelligence.
+**MarketIntel** is an AI-powered web application that generates comprehensive real estate property valuation reports using Meta AI Muse Spark 1.3 Contributor. Whether you're a buyer, seller, or investor, this tool helps you understand property values through data-driven analysis, comparable sales research, and market intelligence.
 
 ## Features
 
 ### 🏠 Comprehensive Property Analysis
 - **Property Valuation Reports**: Generate detailed Comparative Market Analysis (CMA) reports with estimated market value ranges
-- **Web-Grounded Research**: Automatically searches for comparable sales, active listings, and market trends using Google's web search integration
-- **Multiple Report Generation**: Create 1, 3, 5, or 10 individual reports and merge them into a consensus analysis
+- **Web-Grounded Research**: Automatically searches for comparable sales, active listings, and market trends using Meta AI's web search integration, with source citations
+- **Multiple Report Generation**: Create 1, 3, 5, 10, or MAX (100) reports and merge them into a consensus analysis
 - **Document Support**: Upload PDFs, photos, tax records, and other property documents for enhanced analysis
 
 ### 🎯 Audience-Specific Reports
@@ -36,7 +36,7 @@ Choose between two analysis approaches:
 
 ### Prerequisites
 - A modern web browser (Chrome, Firefox, Safari, Edge)
-- A Google Gemini API key ([Get one here](https://aistudio.google.com/apikey))
+- A Meta Model API key with access to `muse-spark-1.3-contributor` ([Get one here](https://dev.meta.ai/))
 
 ### Installation
 
@@ -74,10 +74,9 @@ Choose between two analysis approaches:
 ### First-Time Setup
 
 1. Click the settings icon (⚙️) in the top navigation
-2. Enter your Gemini API key
+2. Enter your Meta AI API key
 3. Optionally check "Remember on this device" to save your API key locally
-4. Select your preferred AI model (default: Gemini 3 Flash)
-5. Configure other settings as needed
+4. Configure other settings as needed. The provider and model are fixed to Meta AI / Muse Spark 1.3 Contributor.
 
 ## How to Use
 
@@ -91,7 +90,7 @@ Choose between two analysis approaches:
 2. **Configure Settings** (optional)
    - Choose your target audience (Buyer/Seller/Investor)
    - Select report style (Standard or Bank-Grade CMA)
-   - Set the number of reports to generate (3 is recommended for best balance)
+   - Set the number of reports to generate (3 is recommended for best balance; MAX mode runs 100 reports with up to three requests at a time)
 
 3. **Generate Analysis**
    - Click "Generate Analysis"
@@ -115,16 +114,17 @@ Choose between two analysis approaches:
 
 ### Architecture
 - **Frontend**: Vanilla JavaScript with Tailwind CSS
-- **AI Integration**: Google Gemini API (v1beta) with web grounding
+- **AI Integration**: Meta Model API (`https://api.meta.ai/v1/responses`), using one shared client in the page and service worker
 - **Storage**: IndexedDB for reports, localStorage for preferences
 - **Service Worker**: Background processing and offline support
 - **PWA**: Installable Progressive Web App with manifest
 
 ### Supported Models
-- Gemini 3 Pro (Preview)
-- Gemini 3 Flash (Preview) - Recommended
-- Gemini 2.5 Flash
-- Gemini 2.5 Pro
+- `muse-spark-1.3-contributor` for draft reports, comparable validation, final merging, value extraction, and address extraction.
+- Saved provider/model preferences are migrated to Meta. Existing report history remains readable; queued jobs from previous providers require a new valuation with a Meta key.
+- Search is enabled only for research stages when selected. A search API error is surfaced; the client does not silently remove search.
+- PDF and image attachments are sent inline. Model-generated JavaScript is not executed in the browser.
+- Requests use `store: false`; this does not change Contributor tier data-use terms. See [Meta models](https://dev.meta.ai/docs/models) and [pricing and terms](https://dev.meta.ai/docs/pricing-rate-limits).
 
 ### Browser Compatibility
 - Chrome/Edge (recommended)
@@ -134,12 +134,18 @@ Choose between two analysis approaches:
 
 Note: Background processing and notifications require modern browser support for Service Workers and Background Sync API.
 
+## Verification
+
+Run `node --test tests/*.test.cjs` for the shared provider, frontend settings, and background workflow checks. Run `node --check app.js`, `node --check meta-api.js`, and `node --check service-worker.js` for syntax checks.
+
 ## Project Structure
 
 ```
 valuate/
 ├── index.html          # Main application HTML
 ├── app.js              # Core application logic
+├── meta-api.js         # Shared Meta Responses API client
+├── tests/              # Provider and workflow regression checks
 ├── service-worker.js   # Background processing & offline support
 ├── styles.css          # Custom styles
 ├── tailwind-config.js  # Tailwind CSS configuration
@@ -151,14 +157,15 @@ valuate/
 
 ## API Usage & Costs
 
-This application uses Google's Gemini API, which has usage-based pricing. Key points:
+This application uses third-party AI APIs with usage-based pricing. Key points:
 
-- **API Key Required**: You must provide your own Gemini API key
-- **Web Search**: Uses Google's web grounding feature (may have additional costs)
+- **API Key Required**: You must provide your own Meta AI API key
+- **Web Search**: Provider search/grounding features may add cost
 - **Token Usage**: Reports can be lengthy; monitor your API usage
-- **Rate Limits**: Subject to Google's API rate limits
+- **Rate Limits**: Subject to your provider's API rate limits
+- **Browser-only local testing**: Keys are entered client-side in this static app, which is convenient for local testing but not ideal for production secret handling
 
-For current pricing and limits, visit [Google AI Studio](https://aistudio.google.com/).
+For current pricing, Contributor data-use terms, and limits, visit [Meta Model API](https://dev.meta.ai/docs/pricing-rate-limits). Never put a real key in source files or commit one. Keys entered for background jobs are stored with those jobs in local IndexedDB; the optional Remember setting also uses localStorage.
 
 ## Limitations & Disclaimers
 
@@ -184,4 +191,4 @@ For issues, questions, or feature requests, please open an issue on the reposito
 
 ---
 
-**Built with ❤️ using Google Gemini AI**
+**Built with Meta AI**

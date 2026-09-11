@@ -1,4 +1,6 @@
-const CACHE_VERSION = 'v2.08';
+importScripts('./meta-api.js');
+
+const CACHE_VERSION = 'v3.1-meta';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 const OFFLINE_URL = './offline.html';
@@ -6,6 +8,7 @@ const JOBS_DB_NAME = 'valuate-jobs';
 const JOBS_STORE_NAME = 'jobs';
 const HISTORY_DB_NAME = 'valuate-history';
 const HISTORY_STORE_NAME = 'reports';
+const DEFAULT_API_SERVICE = MetaAI.service;
 const MAX_REPORT_RETRIES = 2;
 const RETRY_DELAY_MS = 1500;
 let processingQueue = false;
@@ -15,6 +18,7 @@ const PRECACHE_URLS = [
   './index.html',
   './styles.css',
   './app.js',
+  './meta-api.js',
   './tailwind-config.js',
   './manifest.json',
   './icons/icon-192.png',
@@ -77,6 +81,40 @@ function staleWhileRevalidate(request) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getReportGenerationConcurrency(apiService, reportCount) {
+  return Math.min(3, Math.max(1, Number(reportCount) || 1));
+}
+
+async function runWithConcurrencyLimit(items, concurrency, worker) {
+  const normalizedItems = Array.isArray(items) ? items : [];
+  const limit = Math.max(1, Number(concurrency) || 1);
+  if (limit === 1) {
+    const results = [];
+    for (const item of normalizedItems) {
+      results.push(await worker(item));
+    }
+    return results;
+  }
+
+  const results = new Array(normalizedItems.length);
+  let nextIndex = 0;
+
+  const runWorker = async () => {
+    while (nextIndex < normalizedItems.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await worker(normalizedItems[currentIndex], currentIndex);
+    }
+  };
+
+  const workers = Array.from(
+    { length: Math.min(limit, normalizedItems.length) },
+    () => runWorker()
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 let jobsDbPromise = null;
@@ -164,99 +202,78 @@ function generateHistoryId() {
   return `hist-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function normalizeModelName(model) {
-  if (!model) return '';
-  return model.replace(/^models\//i, '');
+function normalizeApiService() {
+  return MetaAI.service;
 }
 
-function getThinkingConfigForModel(model) {
-  const normalized = normalizeModelName(model).toLowerCase();
-  if (normalized.startsWith('gemini-3-')) {
-    return { thinkingLevel: 'high' };
-  }
-  if (normalized.includes('2.5') || normalized.includes('flash-latest')) {
-    return { thinkingBudget: -1 };
-  }
-  return null;
-}
-
-async function callGeminiAPI(apiKey, model, prompt, enableSearch, index, attachments = [], extraTools = []) {
-  const normalizedModel = normalizeModelName(model);
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${normalizedModel}:generateContent?key=${apiKey}`;
-
-  const parts = [{ text: prompt }];
-  if (attachments && attachments.length > 0) {
-    attachments.forEach((attachment) => {
-      parts.push({
-        inline_data: {
-          mime_type: attachment.mimeType,
-          data: attachment.data
-        }
-      });
-    });
-  }
-
-  const thinkingConfig = getThinkingConfigForModel(model);
-  const requestBody = {
-    contents: [{
-      parts
-    }],
-    generationConfig: {
-      temperature: 1 + (index * 0.05),
-      topP: 0.95,
-      topK: 40,
-      maxOutputTokens: 65536
-    }
-  };
-  if (thinkingConfig) {
-    requestBody.generationConfig.thinkingConfig = thinkingConfig;
-  }
-
-  const tools = [];
-  if (enableSearch) {
-    tools.push({ google_search: {} });
-  }
-  if (extraTools.length > 0) {
-    tools.push(...extraTools);
-  }
-  if (tools.length > 0) {
-    requestBody.tools = tools;
-  }
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(requestBody)
+function uniqueModelList(values, limit = 1) {
+  if (!Array.isArray(values)) return [];
+  const seen = new Set();
+  const output = [];
+  values.forEach((value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    output.push(normalized);
   });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error?.message || `API Error: ${response.status}`);
+  if (limit > 0) {
+    return output.slice(0, limit);
   }
+  return output;
+}
 
-  const data = await response.json();
-  if (!data.candidates || data.candidates.length === 0) {
-    throw new Error('No response generated');
+function normalizeModelContextLengthMap(value) {
+  if (!value || typeof value !== 'object') return {};
+  const output = {};
+  Object.entries(value).forEach(([modelId, contextLength]) => {
+    const normalizedModel = String(modelId || '').trim();
+    if (!normalizedModel) return;
+    const parsed = Number(contextLength);
+    output[normalizedModel] = Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  });
+  return output;
+}
+
+function getReportModelsForPayload() {
+  return [MetaAI.model];
+}
+
+function getReportModelForIndex() {
+  return MetaAI.model;
+}
+
+function getReportModelContextLength(payload, modelId) {
+  const contextMap = normalizeModelContextLengthMap(payload?.reportModelContextLengths);
+  if (modelId && Object.prototype.hasOwnProperty.call(contextMap, modelId)) {
+    return contextMap[modelId];
   }
+  const parsed = Number(payload?.reportModelContextLength ?? payload?.modelContextLength);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
 
-  const candidate = data.candidates[0];
-  const contentParts = candidate.content?.parts || [];
-  const content = contentParts
-    .map((part) => part.text || '')
-    .filter(Boolean)
-    .join('\n\n');
+function resolveFinalMergeApiService() {
+  return MetaAI.service;
+}
 
-  let searchSuggestions = [];
-  if (data.candidates[0]?.groundingMetadata?.searchEntryPoint?.renderedContent) {
-    searchSuggestions = [data.candidates[0].groundingMetadata.searchEntryPoint.renderedContent];
-  }
-  if (data.candidates[0]?.groundingMetadata?.webSearchQueries) {
-    searchSuggestions = data.candidates[0].groundingMetadata.webSearchQueries;
-  }
+function resolveFinalMergeModel() {
+  return MetaAI.model;
+}
 
-  return { content, searchSuggestions };
+function resolveFinalMergeApiKey(payload = {}) {
+  return payload.apiService === MetaAI.service ? String(payload.apiKey || '').trim() : '';
+}
+
+function isMaxModeAllowed() {
+  return true;
+}
+
+function getMaxModeUnavailableMessage() {
+  return 'MAX mode is unavailable.';
+}
+
+async function callModelAPI(apiService, apiKey, model, prompt, enableSearch, index, attachments = [], extraTools = [], options = {}) {
+  if (apiService !== MetaAI.service) throw new Error('Start a new valuation with your Meta AI API key.');
+  return MetaAI.generate(apiKey, prompt, enableSearch, attachments, options);
 }
 
 function extractValuations(content) {
@@ -315,7 +332,7 @@ function mergeValueRange(valuations, valueRangeOverride) {
   };
 }
 
-async function inferValueRangeFromReport(apiKey, reportText) {
+async function inferValueRangeFromReport(apiService, apiKey, model, reportText, promptKey = 'standard') {
   const cleanedText = (reportText || '').replace(/\s+/g, ' ').trim();
   if (!cleanedText || !apiKey) {
     return null;
@@ -329,13 +346,16 @@ If no clear value range is present, return "UNKNOWN".
 Report:
 ${cleanedText}`;
 
-  const result = await callGeminiAPI(
+  const result = await callModelAPI(
+    apiService,
     apiKey,
-    'gemini-flash-lite-latest',
+    model,
     prompt,
     false,
     0,
-    []
+    [],
+    [],
+    { promptKey }
   );
 
   const responseText = (result?.content || '').trim();
@@ -371,7 +391,7 @@ ${cleanedText}`;
     : { rangeLow: rangeHigh, rangeHigh: rangeLow };
 }
 
-async function inferAddressFromFinalReport(apiKey, model, reportText) {
+async function inferAddressFromFinalReport(apiService, apiKey, model, reportText, promptKey = 'standard') {
   const cleanedText = (reportText || '').replace(/\s+/g, ' ').trim();
   if (!cleanedText || !apiKey) {
     return null;
@@ -384,13 +404,16 @@ Choose the subject property, not comparable listings. If no clear subject addres
 Report Text:
 ${cleanedText}`;
 
-  const result = await callGeminiAPI(
+  const result = await callModelAPI(
+    apiService,
     apiKey,
-    'gemini-flash-lite-latest',
+    model,
     prompt,
     false,
     0,
-    []
+    [],
+    [],
+    { promptKey }
   );
 
   let candidate = (result?.content || '').trim();
@@ -405,7 +428,7 @@ ${cleanedText}`;
   return candidate;
 }
 
-async function validateCompsAndListings(apiKey, model, enableSearch, reportsText) {
+async function validateCompsAndListings(apiService, apiKey, model, enableSearch, reportsText, modelContextLength = null, promptKey = 'standard') {
   const VALIDATE_COMPS_TEMPLATE = `You are a data verification specialist focused on real estate comps. Extract all comparable sales and active/pending listings from the reports below and verify them.
 
 Verification steps (strict):
@@ -434,13 +457,16 @@ Rules:
 Reports:
 ${reportsText}`;
 
-  const result = await callGeminiAPI(
+  const result = await callModelAPI(
+    apiService,
     apiKey,
     model,
     VALIDATE_COMPS_TEMPLATE,
     enableSearch,
     0,
-    []
+    [],
+    [],
+    { modelContextLength, promptKey }
   );
 
   return result.content;
@@ -454,7 +480,11 @@ async function persistFinalReport(job, markdownContent, valueRangeOverride, infe
     createdAt: Date.now(),
     address: job.payload?.propertyAddress?.trim() || inferredAddress || 'Address not provided',
     audience: job.payload?.reportAudience || '',
-    model: job.payload?.model || '',
+    apiService: job.payload?.apiService || DEFAULT_API_SERVICE,
+    model: job.payload?.reportModel || job.payload?.finalModel || job.payload?.model || '',
+    reportModel: job.payload?.reportModel || '',
+    reportModels: uniqueModelList(job.payload?.reportModels || [], 0),
+    finalModel: job.payload?.finalModel || job.payload?.reportModel || '',
     promptKey: job.payload?.promptKey || 'standard',
     reportCount: job.payload?.reportCount || null,
     enableSearch: Boolean(job.payload?.enableSearch),
@@ -494,7 +524,16 @@ async function showCompletionNotification(job, record) {
 }
 
 async function processJob(job) {
-  if (!job?.payload?.apiKey || !job?.payload?.model) {
+  // Never send credentials from a queued legacy-provider job to Meta.
+  if (job?.payload?.apiService !== MetaAI.service) {
+    job.status = 'error';
+    job.error = 'This queued valuation uses a previous provider. Start a new valuation with your Meta AI API key.';
+    await saveJob(job);
+    await notifyClients({ type: 'JOB_ERROR', jobId: job.id });
+    return;
+  }
+  const hasReportModels = Array.isArray(job?.payload?.reportModels) && job.payload.reportModels.length > 0;
+  if (!job?.payload?.apiKey || !(hasReportModels || job?.payload?.reportModel || job?.payload?.model)) {
     job.status = 'error';
     job.error = 'Missing API configuration.';
     await saveJob(job);
@@ -502,7 +541,45 @@ async function processJob(job) {
     return;
   }
 
-  const reportCount = job.payload.reportCount || 1;
+  job.payload.apiService = normalizeApiService(job.payload.apiService);
+  job.payload.finalModel = MetaAI.model;
+  job.payload.model = MetaAI.model;
+  job.payload.finalMergeApiService = resolveFinalMergeApiService(job.payload.apiService);
+  job.payload.finalMergeApiKey = resolveFinalMergeApiKey(job.payload);
+  if (!job.payload.finalMergeApiKey) {
+    job.status = 'error';
+    job.error = 'Missing Meta AI API key for final merge.';
+    await saveJob(job);
+    await notifyClients({ type: 'JOB_ERROR', jobId: job.id });
+    return;
+  }
+  job.payload.costMode = Boolean(job.payload.costMode);
+  job.payload.reportModels = getReportModelsForPayload(job.payload);
+  job.payload.reportModel = job.payload.reportModels[0] || '';
+  if (!job.payload.reportModel) {
+    job.status = 'error';
+    job.error = 'No report models selected.';
+    await saveJob(job);
+    await notifyClients({ type: 'JOB_ERROR', jobId: job.id });
+    return;
+  }
+  job.payload.finalModel = resolveFinalMergeModel(job.payload.apiService, job.payload.reportModel);
+  job.payload.reportModelContextLengths = normalizeModelContextLengthMap(job.payload.reportModelContextLengths);
+  job.payload.reportModelContextLength = getReportModelContextLength(job.payload, job.payload.reportModel);
+  job.payload.finalModelContextLength = null;
+
+  let reportCount = job.payload.reportCount || 1;
+  if (job.payload.costMode) {
+    reportCount = 1;
+    job.payload.reportCount = 1;
+  }
+  if (reportCount === 100 && !isMaxModeAllowed(job.payload.reportModel, job.payload.apiService)) {
+    job.status = 'error';
+    job.error = getMaxModeUnavailableMessage(job.payload.apiService);
+    await saveJob(job);
+    await notifyClients({ type: 'JOB_ERROR', jobId: job.id });
+    return;
+  }
   job.status = 'running';
   job.phase = 'reports';
   job.error = null;
@@ -510,39 +587,55 @@ async function processJob(job) {
   job.progress.total = reportCount;
   job.reports = Array.isArray(job.reports) ? job.reports : [];
   job.progress.completed = job.reports.filter((item) => item && (item.success || item.error)).length;
+  job.runningIndex = null;
+  job.runningIndices = [];
   await saveJob(job);
   await notifyClients({ type: 'JOB_UPDATE', jobId: job.id });
 
+  const pendingIndices = [];
   for (let i = 0; i < reportCount; i++) {
     const existing = job.reports[i];
     if (existing?.success || existing?.error) {
-      job.progress.completed = job.reports.filter((item) => item && (item.success || item.error)).length;
       continue;
     }
+    pendingIndices.push(i);
+  }
 
-    job.runningIndex = i;
+  const generateReportWithRetry = async (index) => {
+    if (!job.runningIndices.includes(index)) {
+      job.runningIndices.push(index);
+    }
     await saveJob(job);
     await notifyClients({ type: 'JOB_UPDATE', jobId: job.id });
 
     let attempt = 0;
     let lastError = null;
     let result = null;
+    const activeReportModel = getReportModelForIndex(job.payload.reportModels, index) || job.payload.reportModel;
+    const activeReportModelContextLength = getReportModelContextLength(job.payload, activeReportModel);
 
     while (attempt <= MAX_REPORT_RETRIES) {
       try {
-        const response = await callGeminiAPI(
+        const response = await callModelAPI(
+          job.payload.apiService,
           job.payload.apiKey,
-          job.payload.model,
+          activeReportModel,
           job.payload.prompt,
           job.payload.enableSearch,
-          i,
-          job.payload.attachments || []
+          index,
+          job.payload.attachments || [],
+          [],
+          {
+            costMode: job.payload.costMode,
+            modelContextLength: activeReportModelContextLength,
+            promptKey: job.payload.promptKey || 'standard'
+          }
         );
         result = response;
         break;
       } catch (error) {
         lastError = error;
-        if (attempt < MAX_REPORT_RETRIES) {
+        if (error.retryable !== false && attempt < MAX_REPORT_RETRIES) {
           await sleep(RETRY_DELAY_MS);
           attempt++;
           continue;
@@ -552,33 +645,59 @@ async function processJob(job) {
     }
 
     if (result) {
-      job.reports[i] = {
-        index: i,
+      job.reports[index] = {
+        index,
+        model: activeReportModel,
         success: true,
         content: result.content,
         searchSuggestions: result.searchSuggestions || [],
         valuations: extractValuations(result.content)
       };
     } else {
-      job.reports[i] = {
-        index: i,
+      job.reports[index] = {
+        index,
         success: false,
         error: lastError?.message || 'Unknown error'
       };
     }
 
+    job.runningIndices = job.runningIndices.filter((runningIndex) => runningIndex !== index);
     job.progress.completed = job.reports.filter((item) => item && (item.success || item.error)).length;
     await saveJob(job);
     await notifyClients({ type: 'JOB_UPDATE', jobId: job.id });
-  }
+    return job.reports[index];
+  };
+
+  const reportConcurrency = getReportGenerationConcurrency(job.payload.apiService, pendingIndices.length);
+  await runWithConcurrencyLimit(pendingIndices, reportConcurrency, generateReportWithRetry);
 
   job.runningIndex = null;
+  job.runningIndices = [];
   const successfulReports = job.reports.filter((item) => item && item.success);
   if (successfulReports.length === 0) {
+    const firstError = job.reports.find((item) => item?.error)?.error;
     job.status = 'error';
-    job.error = 'No successful reports to merge.';
+    job.error = firstError || 'No successful reports to merge.';
     await saveJob(job);
     await notifyClients({ type: 'JOB_ERROR', jobId: job.id });
+    return;
+  }
+
+  if (job.payload.costMode && successfulReports.length === 1) {
+    const content = successfulReports[0].content || '';
+    const valuations = extractValuations(content);
+    job.finalReport = {
+      content,
+      valueRange: null,
+      inferredAddress: null,
+      valuations
+    };
+    const historyRecord = await persistFinalReport(job, content, null, null);
+    job.status = 'completed';
+    job.phase = 'completed';
+    await saveJob(job);
+    await notifyClients({ type: 'JOB_COMPLETE', jobId: job.id });
+    await showCompletionNotification(job, historyRecord);
     return;
   }
 
@@ -590,16 +709,23 @@ async function processJob(job) {
   await saveJob(job);
   await notifyClients({ type: 'JOB_UPDATE', jobId: job.id });
 
-  let validatedCompsContent = 'Validation step unavailable.';
-  try {
-    validatedCompsContent = await validateCompsAndListings(
-      job.payload.apiKey,
-      job.payload.model,
-      job.payload.enableSearch,
-      reportsText
-    );
-  } catch (error) {
-    validatedCompsContent = `Validation step failed: ${error.message}. Proceed with caution and note that comps were not independently verified.`;
+  let validatedCompsContent = job.payload.costMode
+    ? 'Validation skipped (budget mode).'
+    : 'Validation step unavailable.';
+  if (!job.payload.costMode) {
+    try {
+      validatedCompsContent = await validateCompsAndListings(
+        job.payload.finalMergeApiService,
+        job.payload.finalMergeApiKey,
+        job.payload.finalModel,
+        job.payload.enableSearch,
+        reportsText,
+        null,
+        job.payload.promptKey || 'standard'
+      );
+    } catch (error) {
+      validatedCompsContent = `Validation step failed: ${error.message}. Proceed with caution and note that comps were not independently verified.`;
+    }
   }
 
   job.phase = 'merging';
@@ -620,18 +746,24 @@ Requirements:
 Validated Comparable Sales & Listings:
 ${validatedCompsContent}
 
-Reports to Merge:
+  Reports to Merge:
 ${reportsText}`;
 
   try {
-    const finalResult = await callGeminiAPI(
-      job.payload.apiKey,
-      job.payload.model,
+    const extraTools = [];
+    const finalResult = await callModelAPI(
+      job.payload.finalMergeApiService,
+      job.payload.finalMergeApiKey,
+      job.payload.finalModel,
       FINAL_REPORT_TEMPLATE,
       false,
       0,
       [],
-      [{ code_execution: {} }]
+      extraTools,
+      {
+        costMode: job.payload.costMode,
+        promptKey: job.payload.promptKey || 'standard'
+      }
     );
 
     job.phase = 'finalizing';
@@ -639,17 +771,33 @@ ${reportsText}`;
     await notifyClients({ type: 'JOB_UPDATE', jobId: job.id });
 
     let valueRange = null;
-    try {
-      valueRange = await inferValueRangeFromReport(job.payload.apiKey, finalResult.content);
-    } catch (error) {
-      valueRange = null;
+    if (!job.payload.costMode) {
+      try {
+        valueRange = await inferValueRangeFromReport(
+          job.payload.finalMergeApiService,
+          job.payload.finalMergeApiKey,
+          job.payload.finalModel,
+          finalResult.content,
+          job.payload.promptKey || 'standard'
+        );
+      } catch (error) {
+        valueRange = null;
+      }
     }
 
     let inferredAddress = null;
-    try {
-      inferredAddress = await inferAddressFromFinalReport(job.payload.apiKey, job.payload.model, finalResult.content);
-    } catch (error) {
-      inferredAddress = null;
+    if (!job.payload.costMode) {
+      try {
+        inferredAddress = await inferAddressFromFinalReport(
+          job.payload.finalMergeApiService,
+          job.payload.finalMergeApiKey,
+          job.payload.finalModel,
+          finalResult.content,
+          job.payload.promptKey || 'standard'
+        );
+      } catch (error) {
+        inferredAddress = null;
+      }
     }
 
     const extractedValuations = extractValuations(finalResult.content || '');
@@ -699,7 +847,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  if (url.hostname === 'generativelanguage.googleapis.com') {
+  if (url.hostname === 'api.meta.ai') {
     return;
   }
 

@@ -1,7 +1,7 @@
 {
   "name": "Market Intelligence Studio",
   "short_name": "MarketIntel",
-  "description": "Generate comprehensive property valuation reports with Gemini AI and web grounding.",
+  "description": "Generate comprehensive property valuation reports with Meta AI Muse Spark 1.3 Contributor and web grounding.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

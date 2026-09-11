@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Market Intelligence Studio</title>
-    <meta name="description" content="Generate comprehensive property valuation reports with Gemini AI and web grounding.">
+    <meta name="description" content="Generate comprehensive property valuation reports with Meta AI Muse Spark 1.3 Contributor and web grounding.">
     <meta name="theme-color" content="#0ea5e9">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -34,7 +34,7 @@
                 </div>
             </div>
             <div class="flex items-center gap-2 sm:gap-3">
-                <a href="https://aistudio.google.com/apikey" target="_blank" class="text-xs font-medium text-brand-600 bg-brand-50 px-3 py-1.5 rounded-full hover:bg-brand-100 transition-colors">
+                <a id="apiKeyLink" href="https://dev.meta.ai/" target="_blank" class="text-xs font-medium text-brand-600 bg-brand-50 px-3 py-1.5 rounded-full hover:bg-brand-100 transition-colors">
                     Get API Key <i class="fas fa-external-link-alt ml-1"></i>
                 </a>
                 <button id="historyToggle" type="button" class="relative w-10 h-10 rounded-full border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-sm transition-colors" aria-label="Open saved valuations" aria-expanded="false">
@@ -147,9 +147,22 @@
                 </div>
 
                 <div class="settings-panel-body grid gap-6 md:grid-cols-2">
+                    <!-- API Service -->
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">API Service</label>
+                        <div class="relative">
+                            <i class="fas fa-server absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
+                            <select id="apiService" disabled class="custom-input appearance-none bg-white">
+                                <option value="meta" selected>Meta AI</option>
+                            </select>
+                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-2">All analyses use Meta AI.</p>
+                    </div>
+
                     <!-- API Key -->
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">Gemini API Key</label>
+                        <label id="apiKeyLabel" class="block text-sm font-semibold text-slate-700 mb-2">API Key</label>
                         <div class="input-group !mb-1">
                             <i class="fas fa-key input-icon"></i>
                             <input type="password" id="apiKey" class="custom-input" placeholder="Enter your API Key">
@@ -160,19 +173,17 @@
                         </div>
                     </div>
 
-                    <!-- Model Selection -->
+                    <!-- Report Model Selection -->
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-2">AI Model</label>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Reports Model</label>
                         <div class="relative">
                             <i class="fas fa-microchip absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
-                            <select id="modelSelect" class="custom-input appearance-none bg-white">
-                                <option value="gemini-3-pro-preview">Gemini 3 Pro (Preview)</option>
-                                <option value="gemini-3-flash-preview" selected>Gemini 3 Flash (Preview)</option>
-                                <option value="gemini-flash-latest">Gemini 2.5 Flash</option>
-                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                            <select id="reportModelSelect" disabled class="custom-input appearance-none bg-white">
+                                <option value="muse-spark-1.3-contributor" selected>Muse Spark 1.3 Contributor</option>
                             </select>
-                            <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                            <i id="reportModelChevron" class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
                         </div>
+                        <p id="reportModelHelpText" class="text-xs text-slate-500 mt-2">Muse Spark 1.3 Contributor is used for every report, validation, and final merge.</p>
                     </div>
 
                     <!-- Report Audience -->
@@ -195,6 +206,7 @@
                         <div class="relative">
                             <i class="fas fa-scroll absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
                             <select id="promptSelect" class="custom-input appearance-none bg-white">
+                                <option value="lite">Lite (Lower Cost)</option>
                                 <option value="standard">Standard Valuation</option>
                                 <option value="experimental" selected>Bank-Grade CMA (Strict)</option>
                             </select>
@@ -209,11 +221,32 @@
                             <i class="fas fa-layer-group absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 z-10"></i>
                             <select id="reportCount" class="custom-input appearance-none bg-white">
                                 <option value="1">1 Report</option>
-                                <option value="3">3 Reports (Best Balance)</option>
-                                <option value="5">5 Reports</option>
-                                <option value="10" selected>10 Reports (Deep Dive)</option>
+                                <option value="3" selected>3 Reports (Best Balance)</option>
+                                <option value="5">5 Reports (Higher Cost)</option>
+                                <option value="10">10 Reports (Deep Dive)</option>
+                                <option value="100">MAX Mode (100 Reports, $$$)</option>
                             </select>
                             <i class="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                        </div>
+                    </div>
+
+                    <!-- Cost Controls -->
+                    <div class="md:col-span-2">
+                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+                            <div class="flex items-start gap-3">
+                                <input type="checkbox" id="budgetMode" class="mt-1 rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                                <div>
+                                    <label for="budgetMode" class="text-sm font-semibold text-slate-700">Budget mode</label>
+                                    <p class="text-xs text-slate-500 mt-1">Forces 1 report, uses the Lite prompt, skips validation and extra extraction calls, and caps output length.</p>
+                                </div>
+                            </div>
+                            <div class="flex items-start gap-3">
+                                <input type="checkbox" id="enableSearch" class="mt-1 rounded border-slate-300 text-brand-600 focus:ring-brand-500" checked>
+                                <div>
+                                    <label for="enableSearch" class="text-sm font-semibold text-slate-700">Web search grounding</label>
+                                    <p class="text-xs text-slate-500 mt-1">Turn off to reduce cost (analysis will rely only on provided details and general knowledge).</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -224,11 +257,11 @@
         <div id="progressSection" class="hidden mt-8 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden animate-slide-up">
             <div class="p-6 bg-slate-900 text-white">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 id="progressTitle" class="text-lg font-semibold flex items-center gap-2">
+                    <h3 id="progressTitle" class="hidden text-lg font-semibold flex items-center gap-2">
                         <i class="fas fa-circle-notch fa-spin text-brand-500"></i>
                         Running Analysis...
                     </h3>
-                    <span id="progressText" class="text-sm font-mono text-slate-400 bg-slate-800 px-3 py-1 rounded-full">0/0</span>
+                    <span id="progressText" class="hidden text-sm font-mono text-slate-400 bg-slate-800 px-3 py-1 rounded-full">0/0</span>
                 </div>
                 <!-- Progress Bar -->
                 <div class="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
@@ -237,7 +270,7 @@
             </div>
             
             <!-- Live Logs -->
-            <div id="reportStatusList" class="p-4 max-h-60 overflow-y-auto bg-slate-50 border-t border-slate-100 space-y-2">
+            <div id="reportStatusList" class="hidden p-4 max-h-60 overflow-y-auto bg-slate-50 border-t border-slate-100 space-y-2">
                 <!-- Status items injected here -->
             </div>
         </div>
@@ -272,7 +305,7 @@
             </div>
 
             <!-- Individual Reports Accordion List -->
-            <div id="reportsContainer" class="space-y-4"></div>
+            <div id="reportsContainer" class="hidden space-y-4"></div>
         </div>
 
     </div>
@@ -303,7 +336,8 @@
         </aside>
     </div>
 
-    <!-- Original Logic Script (Unchanged) -->
+    <!-- Shared provider client, followed by application logic. -->
+    <script src="meta-api.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
