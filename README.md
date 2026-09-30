@@ -31,6 +31,7 @@ Tailor your reports for different audiences:
 ## Getting Started
 
 ### Prerequisites
+- Node.js 24.x (use `nvm install` and `nvm use` with the included `.nvmrc`)
 - A modern web browser (Chrome, Firefox, Safari, Edge)
 - A Meta AI API key configured as a server environment variable
 - Vercel Postgres / Neon connection environment variables
